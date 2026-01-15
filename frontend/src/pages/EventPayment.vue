@@ -346,7 +346,15 @@ async function fetchRegistrations() {
         })
         
         // Atualizar paymentInfo de forma reativa (usar Object.assign para garantir reatividade)
-        paymentInfo.value = Object.assign({}, data)
+        const updatedData = Object.assign({}, data)
+        
+        // Se gateway_payload.status for CONFIRMED ou RECEIVED, garantir que payment_status seja 'paid'
+        if (updatedData.gateway_payload?.status === 'CONFIRMED' || updatedData.gateway_payload?.status === 'RECEIVED') {
+          updatedData.payment_status = 'paid'
+          console.log('[EventPayment] payment_status atualizado para "paid" devido ao gateway_status:', updatedData.gateway_payload.status)
+        }
+        
+        paymentInfo.value = updatedData
         registrations.value = [...(data.registrations || [])]
         
         console.log('[EventPayment] ===== DADOS ATUALIZADOS DO BACKEND =====')
@@ -370,7 +378,15 @@ async function fetchRegistrations() {
               payload: paymentData.value.pix.payload
             })
             // Atualizar paymentInfo de forma reativa (usar Object.assign para garantir reatividade)
-            paymentInfo.value = Object.assign({}, data)
+            const updatedData = Object.assign({}, data)
+            
+            // Se gateway_payload.status for CONFIRMED ou RECEIVED, garantir que payment_status seja 'paid'
+            if (updatedData.gateway_payload?.status === 'CONFIRMED' || updatedData.gateway_payload?.status === 'RECEIVED') {
+              updatedData.payment_status = 'paid'
+              console.log('[EventPayment] payment_status atualizado para "paid" devido ao gateway_status:', updatedData.gateway_payload.status)
+            }
+            
+            paymentInfo.value = updatedData
             registrations.value = [...(data.registrations || [])]
             
             console.log('[EventPayment] ===== DADOS ATUALIZADOS (via PIX payload) =====')
@@ -447,7 +463,15 @@ async function fetchRegistrations() {
               })
               
               // Atualizar paymentInfo de forma reativa (usar Object.assign para garantir reatividade)
-              paymentInfo.value = Object.assign({}, paymentDetails)
+              const updatedDetails = Object.assign({}, paymentDetails)
+              
+              // Se gateway_payload.status for CONFIRMED ou RECEIVED, garantir que payment_status seja 'paid'
+              if (updatedDetails.gateway_payload?.status === 'CONFIRMED' || updatedDetails.gateway_payload?.status === 'RECEIVED') {
+                updatedDetails.payment_status = 'paid'
+                console.log('[EventPayment] payment_status atualizado para "paid" devido ao gateway_status:', updatedDetails.gateway_payload.status)
+              }
+              
+              paymentInfo.value = updatedDetails
               registrations.value = [...(paymentDetails.registrations || [])]
               
               console.log('[EventPayment] ===== DADOS ATUALIZADOS (via busca) =====')
@@ -623,10 +647,19 @@ function setupFirebaseListener(paymentId) {
           
           if (payload.payment_status) {
             updatedInfo.payment_status = payload.payment_status
+            console.log('[EventPayment] Firebase: payment_status atualizado para:', payload.payment_status)
           }
           
           if (payload.gateway_payload) {
+            // Mesclar gateway_payload mantendo dados existentes
             updatedInfo.gateway_payload = Object.assign({}, updatedInfo.gateway_payload || {}, payload.gateway_payload)
+            console.log('[EventPayment] Firebase: gateway_payload atualizado, status:', payload.gateway_payload.status)
+          }
+          
+          // Se gateway_payload.status for CONFIRMED ou RECEIVED, garantir que payment_status seja 'paid'
+          if (updatedInfo.gateway_payload?.status === 'CONFIRMED' || updatedInfo.gateway_payload?.status === 'RECEIVED') {
+            updatedInfo.payment_status = 'paid'
+            console.log('[EventPayment] Firebase: payment_status forçado para "paid" devido ao gateway_status CONFIRMED/RECEIVED')
           }
           
           // Atualizar paymentInfo com nova referência
@@ -634,7 +667,8 @@ function setupFirebaseListener(paymentId) {
           
           console.log('[EventPayment] Firebase: paymentInfo atualizado do payload', {
             payment_status: paymentInfo.value.payment_status,
-            gateway_status: paymentInfo.value.gateway_payload?.status
+            gateway_status: paymentInfo.value.gateway_payload?.status,
+            paymentStatus_computed: paymentStatus.value
           })
         }
         
@@ -646,7 +680,15 @@ function setupFirebaseListener(paymentId) {
             const { data } = await http.get(`/registrations/by-payment/${encodeURIComponent(currentPaymentId)}`)
             
             // Atualizar paymentInfo de forma reativa (forçar nova referência)
-            paymentInfo.value = Object.assign({}, data)
+            const updatedData = Object.assign({}, data)
+            
+            // Se gateway_payload.status for CONFIRMED ou RECEIVED, garantir que payment_status seja 'paid'
+            if (updatedData.gateway_payload?.status === 'CONFIRMED' || updatedData.gateway_payload?.status === 'RECEIVED') {
+              updatedData.payment_status = 'paid'
+              console.log('[EventPayment] Firebase: payment_status atualizado para "paid" devido ao gateway_status:', updatedData.gateway_payload.status)
+            }
+            
+            paymentInfo.value = updatedData
             registrations.value = [...(data.registrations || [])]
             
             console.log('[EventPayment] Firebase: Dados atualizados do backend!', {
@@ -733,6 +775,12 @@ function setupFirebaseListener(paymentId) {
             
             if (payload.gateway_payload) {
               updatedInfo.gateway_payload = Object.assign({}, updatedInfo.gateway_payload || {}, payload.gateway_payload)
+            }
+            
+            // Se gateway_payload.status for CONFIRMED ou RECEIVED, garantir que payment_status seja 'paid'
+            if (updatedInfo.gateway_payload?.status === 'CONFIRMED' || updatedInfo.gateway_payload?.status === 'RECEIVED') {
+              updatedInfo.payment_status = 'paid'
+              console.log('[EventPayment] Firebase (phone): payment_status forçado para "paid" devido ao gateway_status CONFIRMED/RECEIVED')
             }
             
             paymentInfo.value = updatedInfo
