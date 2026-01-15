@@ -133,7 +133,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCurrency } from '@/composables/useCurrency'
 import { FontAwesomeIcon } from '@/plugins/fontawesome'
@@ -347,10 +347,8 @@ async function fetchRegistrations() {
         })
         console.log('[EventPayment] paymentStatus computed será:', paymentStatus.value)
         
-        // Configurar listener APÓS atualizar paymentInfo (se ainda não estiver configurado)
-        if (!unsubscribe) {
-          setupFirebaseListener(cleanPaymentId)
-        }
+        // Sempre reconfigurar listener para garantir que está ativo
+        setupFirebaseListener(cleanPaymentId)
         
         loading.value = false
         isFetching = false
@@ -363,9 +361,11 @@ async function fetchRegistrations() {
             const { data } = await http.post('/registrations/by-pix-payload', {
               payload: paymentData.value.pix.payload
             })
-            paymentInfo.value = data
+            // Atualizar paymentInfo de forma reativa
+            paymentInfo.value = { ...data }
             registrations.value = data.registrations || []
             if (data.payment_id) {
+              // Sempre reconfigurar listener
               setupFirebaseListener(data.payment_id)
             }
             loading.value = false
@@ -442,23 +442,23 @@ async function fetchRegistrations() {
                 gateway_status: paymentInfo.value.gateway_payload?.status
               })
               
-              // Configurar listener após atualizar paymentInfo (se ainda não estiver configurado)
-              if (!unsubscribe) {
-                setupFirebaseListener(foundPaymentId)
-              }
+              // Sempre reconfigurar listener para garantir que está ativo
+              setupFirebaseListener(foundPaymentId)
             } catch (err) {
               console.warn('Erro ao buscar detalhes do pagamento:', err)
               // Fallback: usar dados encontrados mesmo sem detalhes
               paymentInfo.value = { ...found }
               registrations.value = found.registrations || []
-              if (foundPaymentId && !unsubscribe) {
+              if (foundPaymentId) {
+                // Sempre reconfigurar listener
                 setupFirebaseListener(foundPaymentId)
               }
             }
           } else {
             paymentInfo.value = { ...found }
             registrations.value = found.registrations || []
-            if (foundPaymentId && !unsubscribe) {
+            if (foundPaymentId) {
+              // Sempre reconfigurar listener
               setupFirebaseListener(foundPaymentId)
             }
           }
@@ -486,18 +486,30 @@ async function fetchRegistrations() {
         registrations_count: 0,
       }
       
-      // Configurar listener do Firebase mesmo sem payment_id completo
+      // Sempre configurar listener do Firebase se tiver payment_id (para PIX, Boleto e Cartão)
       const paymentIdToUse = paymentData.value?.id || paymentInfo.value?.payment_id
       if (paymentIdToUse) {
+        console.log('[EventPayment] Configurando listener Firebase (fallback) para todos os tipos de pagamento:', paymentIdToUse)
         setupFirebaseListener(paymentIdToUse)
+      } else {
+        console.warn('[EventPayment] Nenhum payment_id disponível para listener Firebase')
       }
       
-      if (!paymentId && paymentData.value?.method === 'PIX') {
+      // Tentar buscar novamente após alguns segundos se não encontrou (para PIX, Boleto e Cartão)
+      if (!paymentId) {
         setTimeout(async () => {
           if (!isFetching) {
+            console.log('[EventPayment] Tentando buscar novamente após timeout...')
             await fetchRegistrations()
           }
         }, 3000)
+      }
+    } else {
+      // Se já tem paymentInfo, garantir que o listener está configurado
+      const existingPaymentId = paymentInfo.value.payment_id || paymentInfo.value.id
+      if (existingPaymentId && !unsubscribe) {
+        console.log('[EventPayment] Reconfigurando listener Firebase com paymentInfo existente:', existingPaymentId)
+        setupFirebaseListener(existingPaymentId)
       }
     }
     
@@ -524,12 +536,6 @@ async function fetchRegistrations() {
 }
   
 function setupFirebaseListener(paymentId) {
-  if (unsubscribe) {
-    console.log('[EventPayment] Removendo listener anterior')
-    unsubscribe()
-  }
-  unsubscribe = null
-  
   if (!paymentId) {
     // Tentar usar payment_id do paymentData se disponível
     paymentId = paymentData.value?.id || paymentInfo.value?.payment_id
@@ -537,6 +543,13 @@ function setupFirebaseListener(paymentId) {
       console.warn('[EventPayment] Nenhum payment_id disponível para configurar listener')
       return
     }
+  }
+  
+  // Limpar listener anterior se existir
+  if (unsubscribe) {
+    console.log('[EventPayment] Removendo listener anterior antes de configurar novo')
+    unsubscribe()
+    unsubscribe = null
   }
   
   console.log('[EventPayment] Configurando listener Firebase para payment_id:', paymentId)
@@ -552,6 +565,14 @@ function setupFirebaseListener(paymentId) {
       return
     }
     
+    const payload = snapshot.val()
+    console.log('[EventPayment] Firebase: Snapshot recebido', { 
+      payment_status: payload.payment_status, 
+      status: payload.status,
+      gateway_status: payload.gateway_payload?.status,
+      isFirstSnapshot
+    })
+    
     // Sempre ignorar o primeiro snapshot (igual ao RegistrationsByCpf)
     if (isFirstSnapshot) {
       console.log('[EventPayment] Firebase: Ignorando primeiro snapshot')
@@ -559,7 +580,6 @@ function setupFirebaseListener(paymentId) {
       return
     }
     
-    const payload = snapshot.val()
     const token = payload.last_updated || payload.updated_at || JSON.stringify(payload)
     
     // Evitar atualizações duplicadas usando token global
@@ -569,7 +589,7 @@ function setupFirebaseListener(paymentId) {
     }
     lastUpdateToken = token
     
-    console.log('[EventPayment] Firebase: Atualização recebida', { 
+    console.log('[EventPayment] Firebase: Atualização detectada!', { 
       payment_status: payload.payment_status, 
       status: payload.status,
       gateway_status: payload.gateway_payload?.status,
@@ -578,10 +598,13 @@ function setupFirebaseListener(paymentId) {
     
     // Recarregar dados quando houver atualização (igual ao RegistrationsByCpf)
     if (!isFetching) {
-      console.log('[EventPayment] Firebase: Recarregando dados...')
+      console.log('[EventPayment] Firebase: Recarregando dados do backend...')
       isFetching = true
       try {
         await fetchRegistrations()
+        console.log('[EventPayment] Firebase: Dados recarregados com sucesso')
+      } catch (err) {
+        console.error('[EventPayment] Firebase: Erro ao recarregar dados', err)
       } finally {
         isFetching = false
       }
@@ -592,7 +615,7 @@ function setupFirebaseListener(paymentId) {
     console.error('[EventPayment] Firebase: Erro no listener', error)
   })
   
-  console.log('[EventPayment] Listener Firebase configurado com sucesso')
+  console.log('[EventPayment] Listener Firebase configurado com sucesso para:', paymentId)
   
   // Também escutar por telefone como fallback (se tivermos registrations)
   const phoneToUse = registrations.value.length > 0 && registrations.value[0].phone
@@ -762,12 +785,24 @@ async function copyDigitableLine() {
   }
 }
 
+// Watch para garantir que o listener seja configurado quando paymentInfo mudar
+watch(() => paymentInfo.value?.payment_id || paymentInfo.value?.id, (newPaymentId, oldPaymentId) => {
+  if (newPaymentId && newPaymentId !== oldPaymentId) {
+    console.log('[EventPayment] Watch: payment_id mudou, reconfigurando listener:', { old: oldPaymentId, new: newPaymentId })
+    setupFirebaseListener(newPaymentId)
+  }
+}, { immediate: false })
+
 onMounted(() => {
   loadPaymentData()
 })
 
 onBeforeUnmount(() => {
-  if (unsubscribe) unsubscribe()
+  if (unsubscribe) {
+    console.log('[EventPayment] Limpando listener Firebase ao desmontar')
+    unsubscribe()
+    unsubscribe = null
+  }
   if (fetchTimeout) {
     clearTimeout(fetchTimeout)
     fetchTimeout = null
