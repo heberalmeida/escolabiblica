@@ -1,0 +1,14 @@
+{
+  "name": "appteste",
+  "version": "1.0.0",
+  "description": "**Apps:**",
+  "scripts": {
+    "dev": "concurrently --kill-others \"cd frontend && yarn dev\" \"cd backend && yarn api\"",
+    "prod": "concurrently --kill-others \"cd frontend && yarn prod\" \"cd backend && yarn api\""
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,16 @@
+
+Adicionar imagens em Grupo
+Adicionar imagens em Categorias
+Adicionar qtd de estoque
+Adicionar firebase 
+Adicionar produtos destaques
+desativar produtos
+adicionar tempo de promoção
+adicionar valores em oferta
+criar template mostrando preview
+adicionar busca por nome
+adicionar preço anterior em variacao
+adicionar copia ou modelo de tamanhos com checkbox
+adicionar sugestoes de cores com checkbox
+informar estoque inifito
+melhorar experiencia mobile
