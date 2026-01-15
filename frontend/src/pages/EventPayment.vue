@@ -65,7 +65,8 @@
           </div>
 
           <!-- QR Code PIX ou Boleto (quando não pago) -->
-          <div v-if="paymentStatus !== 'paid'" class="mb-4">
+          <!-- NUNCA mostrar QR Code para cartão de crédito, apenas para PIX e Boleto quando pendente -->
+          <div v-if="paymentStatus !== 'paid' && !isCard" class="mb-4">
             <div v-if="isPix" class="space-y-4">
               <div v-if="paymentData?.pix?.qrCodeImage || paymentInfo?.gateway_payload?.pixQrCodeImage" class="flex justify-center">
                 <img :src="`data:image/png;base64,${paymentData?.pix?.qrCodeImage || paymentInfo?.gateway_payload?.pixQrCodeImage}`" alt="QR Code PIX"
@@ -172,7 +173,14 @@ const paymentStatus = computed(() => {
       console.log('[EventPayment] paymentStatus computed: paid (via payment_status)')
       return 'paid'
     }
-    if (status === 'pending') return 'pending'
+    if (status === 'pending') {
+      // Se for cartão de crédito e gateway_status for CONFIRMED, considerar como pago
+      if (isCard.value && paymentInfo.value.gateway_payload?.status === 'CONFIRMED') {
+        console.log('[EventPayment] paymentStatus computed: paid (cartão confirmado via gateway_status)')
+        return 'paid'
+      }
+      return 'pending'
+    }
     if (status === 'canceled') return 'canceled'
     if (status === 'overdue') return 'overdue'
   }
@@ -183,13 +191,30 @@ const paymentStatus = computed(() => {
     console.log('[EventPayment] paymentStatus computed: paid (via gateway_status)', gatewayStatus)
     return 'paid'
   }
-  if (gatewayStatus === 'PENDING') return 'pending'
+  if (gatewayStatus === 'PENDING') {
+    // Se for cartão de crédito e status for PENDING mas creditCard.status for CONFIRMED
+    if (isCard.value && paymentData.value?.creditCard?.status === 'CONFIRMED') {
+      console.log('[EventPayment] paymentStatus computed: paid (cartão confirmado via paymentData)')
+      return 'paid'
+    }
+    return 'pending'
+  }
   if (gatewayStatus === 'CANCELLED' || gatewayStatus === 'DELETED') return 'canceled'
   if (gatewayStatus === 'OVERDUE') return 'overdue'
   
   // Fallback: verificar no paymentData (apenas se não tiver paymentInfo)
   if (!paymentInfo.value && paymentData.value) {
-    if (paymentData.value.creditCard?.status === 'CONFIRMED') return 'paid'
+    // Para cartão de crédito, verificar creditCard.status
+    if (isCard.value && paymentData.value.creditCard?.status === 'CONFIRMED') {
+      console.log('[EventPayment] paymentStatus computed: paid (cartão confirmado via paymentData fallback)')
+      return 'paid'
+    }
+    // Para PIX e Boleto, sempre pending se não tiver paymentInfo
+    return 'pending'
+  }
+  
+  // Se for cartão de crédito e não tiver dados, assumir pending (mas não mostrar QR code)
+  if (isCard.value) {
     return 'pending'
   }
   
