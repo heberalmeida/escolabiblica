@@ -1,0 +1,274 @@
+name: Deploy Backend - Laravel API
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Clean unnecessary files
+        working-directory: backend
+        run: |
+          # Remove Python files
+          find . -type f -name "*.py" ! -path "./vendor/*" -exec rm -f {} +
+          
+          # Remove shell scripts (except setup_cronjob.sh if exists)
+          find . -type f -name "*.sh" ! -path "./vendor/*" ! -name "setup_cronjob.sh" -exec rm -f {} +
+          
+          # Remove backups directory
+          rm -rf backups/ 2>/dev/null || true
+          
+          # Remove SQL files (keep migrations in database/migrations)
+          find . -type f -name "*.sql" ! -path "./database/migrations/*" ! -path "./vendor/*" -exec rm -f {} +
+          
+          # Remove documentation files (README, MD files)
+          find . -type f -name "*.md" ! -path "./vendor/*" -exec rm -f {} +
+          
+          # Remove Python requirements.txt
+          rm -f requirements.txt 2>/dev/null || true
+          
+          # Remove Docker files
+          rm -f Dockerfile docker-compose.yml docker-compose.override.yml 2>/dev/null || true
+          
+          # Remove temporary text files
+          find . -type f -name "*.txt" ! -path "./vendor/*" ! -name "composer.txt" -exec rm -f {} +
+          
+          # Remove temporary JSON files (keep package.json and composer files)
+          find . -type f -name "*.json" ! -path "./vendor/*" ! -name "package.json" ! -name "composer.json" ! -name "package-lock.json" ! -name "composer.lock" -exec rm -f {} +
+          
+          # Remove node_modules (will be reinstalled on server)
+          rm -rf node_modules
+
+      - name: Fix permissions on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-api-escolabiblica
+          password: oxzGrBrHzfhtB2mQFO7K
+          port: 22
+          script: |
+            cd /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br
+            # Try to remove problematic subdirectories (may fail if owned by root)
+            rm -rf storage/framework bootstrap/cache 2>/dev/null || echo "Note: Could not remove directories (may be owned by root - this is okay)"
+            # Ensure directories exist with correct structure
+            mkdir -p storage/framework/{sessions,views,cache/data,testing} 2>/dev/null || true
+            mkdir -p bootstrap/cache 2>/dev/null || true
+            # Set permissions (775 allows group write access)
+            # If directories are owned by root, chmod may fail, but we try anyway
+            chmod -R 775 storage bootstrap/cache 2>/dev/null || true
+            # Try to fix ownership (will fail if directories owned by root - user must fix manually with sudo)
+            if chown -R admcg-api-escolabiblica:admcg-api-escolabiblica storage bootstrap/cache 2>/dev/null; then
+              echo "✅ Permissions fixed successfully"
+            else
+              echo "⚠️ WARNING: Could not change ownership. If deploy fails, run on server:"
+              echo "   sudo chown -R admcg-api-escolabiblica:admcg-api-escolabiblica /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br/storage"
+              echo "   sudo chown -R admcg-api-escolabiblica:admcg-api-escolabiblica /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br/bootstrap/cache"
+            fi
+
+      - name: Install rsync and sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync sshpass
+
+      - name: Setup SSH known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H 72.60.247.47 >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy files to server (incremental with rsync)
+        run: |
+          cd backend
+          # Usar rsync para deploy incremental (apenas arquivos alterados)
+          sshpass -p 'oxzGrBrHzfhtB2mQFO7K' rsync -avzr --delete \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='storage' \
+            --exclude='bootstrap/cache' \
+            --exclude='.env' \
+            --exclude='.env.prod' \
+            --exclude='.env.backup' \
+            --exclude='*.log' \
+            --exclude='.DS_Store' \
+            --exclude='Thumbs.db' \
+            ./ admcg-api-escolabiblica@72.60.247.47:/home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br/
+
+      - name: Deploy .env.prod file (if exists)
+        uses: appleboy/scp-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-api-escolabiblica
+          password: oxzGrBrHzfhtB2mQFO7K
+          port: 22
+          source: "backend/.env.prod"
+          target: /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br
+          overwrite: true
+        continue-on-error: true
+
+      - name: Copy .env.prod to .env on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-api-escolabiblica
+          password: oxzGrBrHzfhtB2mQFO7K
+          port: 22
+          script: |
+            cd /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br
+            if [ -f .env.prod ]; then
+              cp .env.prod .env
+              echo "✅ .env.prod copiado para .env"
+            else
+              echo "⚠️ AVISO: Arquivo .env.prod não encontrado no servidor"
+            fi
+
+      - name: Fix permissions after deployment
+        uses: appleboy/ssh-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-api-escolabiblica
+          password: oxzGrBrHzfhtB2mQFO7K
+          port: 22
+          script: |
+            cd /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br
+            # Ensure storage and bootstrap directories have correct permissions
+            mkdir -p storage/framework/{sessions,views,cache/data,testing}
+            mkdir -p bootstrap/cache
+            chmod -R 775 storage bootstrap/cache
+            # Try to fix ownership (may fail if not root, but that's okay if user already owns them)
+            chown -R admcg-api-escolabiblica:admcg-api-escolabiblica storage bootstrap/cache 2>/dev/null || true
+
+      - name: Check for composer.json changes
+        id: check_composer
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q "backend/composer.json\|backend/composer.lock"; then
+            echo "composer_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "composer_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for package.json changes
+        id: check_package
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q "backend/package.json\|backend/package-lock.json"; then
+            echo "package_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "package_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run deployment commands on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-api-escolabiblica
+          password: oxzGrBrHzfhtB2mQFO7K
+          port: 22
+          script: |
+            cd /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br
+            
+            # Install/update PHP dependencies only if composer files changed
+            if [ "${{ steps.check_composer.outputs.composer_changed }}" == "true" ] || [ ! -d "vendor" ]; then
+              echo "📦 Atualizando dependências do Composer..."
+              if command -v php8.3 &> /dev/null; then
+                php8.3 $(which composer) install --no-dev --optimize-autoloader --no-interaction 2>/dev/null || \
+                php8.3 /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction 2>/dev/null || \
+                php8.3 /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction 2>/dev/null || \
+                php8.3 composer.phar install --no-dev --optimize-autoloader --no-interaction
+              else
+                composer install --no-dev --optimize-autoloader --no-interaction
+              fi
+            else
+              echo "⏭️ Pulando atualização do Composer (sem alterações)"
+            fi
+            
+            # Install Node dependencies only if package files changed
+            if [ "${{ steps.check_package.outputs.package_changed }}" == "true" ] || [ ! -d "node_modules" ]; then
+              echo "📦 Atualizando dependências do NPM..."
+              npm ci || npm install
+            else
+              echo "⏭️ Pulando atualização do NPM (sem alterações)"
+            fi
+            
+            # Build assets only if package.json changed or if dist doesn't exist
+            if [ "${{ steps.check_package.outputs.package_changed }}" == "true" ] || [ ! -d "public/build" ]; then
+              echo "🔨 Compilando assets..."
+              npm run production || npm run prod || npm run build
+            else
+              echo "⏭️ Pulando compilação de assets (sem alterações)"
+            fi
+            
+            # Run Laravel commands with PHP 8.3
+            echo "🔄 Executando comandos do Laravel..."
+            if command -v php8.3 &> /dev/null; then
+              # Limpar cache antes de recriar
+              php8.3 artisan route:clear || true
+              php8.3 artisan config:clear || true
+              php8.3 artisan view:clear || true
+              php8.3 artisan cache:clear || true
+              # Recriar cache
+              php8.3 artisan config:cache
+              php8.3 artisan route:cache
+              php8.3 artisan view:cache
+              php8.3 artisan storage:link || true
+            else
+              # Limpar cache antes de recriar
+              php artisan route:clear || true
+              php artisan config:clear || true
+              php artisan view:clear || true
+              php artisan cache:clear || true
+              # Recriar cache
+              php artisan config:cache
+              php artisan route:cache
+              php artisan view:cache
+              php artisan storage:link || true
+            fi
+
+      - name: Install cronjob
+        uses: appleboy/ssh-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-api-escolabiblica
+          password: oxzGrBrHzfhtB2mQFO7K
+          port: 22
+          script: |
+            cd /home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br
+            echo "📅 Instalando cronjob do Laravel..."
+            PROJECT_PATH="/home/admcg-api-escolabiblica/htdocs/api.escolabiblica.admcg.com.br"
+            CRON_COMMAND="* * * * * cd $PROJECT_PATH && php8.3 artisan schedule:run >> /dev/null 2>&1"
+            
+            # Verificar se o cronjob já existe
+            if crontab -l 2>/dev/null | grep -q "schedule:run"; then
+              echo "⚠️ Cronjob já existe. Atualizando..."
+              # Remover cronjob antigo
+              crontab -l 2>/dev/null | grep -v "schedule:run" | crontab -
+            fi
+            
+            # Adicionar novo cronjob
+            (crontab -l 2>/dev/null; echo "$CRON_COMMAND") | crontab -
+            
+            if [ $? -eq 0 ]; then
+              echo "✅ Cronjob instalado com sucesso!"
+              echo "Cronjob: $CRON_COMMAND"
+              crontab -l | grep "schedule:run"
+            else
+              echo "❌ Erro ao instalar cronjob"
+              exit 1
+            fi
+
+      - name: Notify deployment
+        run: |
+          echo "✅ Backend deployed successfully to api.escolabiblica.admcg.com.br"
+          echo "✅ Cronjob instalado e configurado"

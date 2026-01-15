@@ -1,0 +1,53 @@
+name: Deploy Frontend - Escola Biblica
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build application
+        working-directory: frontend
+        run: yarn build:prod || yarn build
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@master
+        with:
+          host: 72.60.247.47
+          username: admcg-escolabiblica
+          password: H6Ib5PLfxfUn8de6EYwJ
+          port: 22
+          source: "frontend/dist/"
+          target: /home/admcg-escolabiblica/htdocs/escolabiblica.admcg.com.br
+          overwrite: true
+          strip_components: 2
+
+      - name: Notify deployment
+        run: |
+          echo "✅ Frontend deployed successfully to escolabiblica.admcg.com.br"
