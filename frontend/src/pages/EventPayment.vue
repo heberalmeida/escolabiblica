@@ -245,6 +245,12 @@ function loadPaymentData() {
     const paymentParam = route.query.payment
     if (paymentParam) {
       paymentData.value = JSON.parse(decodeURIComponent(paymentParam))
+      
+      // Configurar listener do Firebase imediatamente com o payment_id do paymentData
+      if (paymentData.value?.id) {
+        setupFirebaseListener(paymentData.value.id)
+      }
+      
       fetchRegistrations()
     } else {
       error.value = 'Dados de pagamento não encontrados.'
@@ -418,6 +424,12 @@ async function fetchRegistrations() {
         registrations_count: 0,
       }
       
+      // Configurar listener do Firebase mesmo sem payment_id completo
+      const paymentIdToUse = paymentData.value?.id || paymentInfo.value?.payment_id
+      if (paymentIdToUse) {
+        setupFirebaseListener(paymentIdToUse)
+      }
+      
       if (!paymentId && paymentData.value?.method === 'PIX') {
         setTimeout(async () => {
           if (!isFetching) {
@@ -453,18 +465,139 @@ function setupFirebaseListener(paymentId) {
   if (unsubscribe) unsubscribe()
   unsubscribe = null
   
-  if (!paymentId) return
+  if (!paymentId) {
+    // Tentar usar payment_id do paymentData se disponível
+    paymentId = paymentData.value?.id || paymentInfo.value?.payment_id
+    if (!paymentId) return
+  }
   
   const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
   const paymentRef = dbRef(db, `updates/${prefix}registrations_by_payment_${paymentId}`)
   let lastPaymentUpdate = null
+  let isFirstSnapshot = true
+  
   unsubscribe = onValue(paymentRef, async (snapshot) => {
-    if (snapshot.exists()) {
-      const data = snapshot.val()
-      const updateToken = data.last_updated || JSON.stringify(data)
-      
-      if (updateToken === lastPaymentUpdate || isFetching) return
+    if (!snapshot.exists()) return
+    
+    const data = snapshot.val()
+    const updateToken = data.last_updated || data.updated_at || JSON.stringify(data)
+    
+    // Verificar se o status mudou para pago
+    const isPaid = data.payment_status === 'paid' || data.status === 'paid' || 
+                   data.gateway_payload?.status === 'CONFIRMED' || 
+                   data.gateway_payload?.status === 'RECEIVED'
+    
+    // Ignorar primeiro snapshot apenas se não tiver dados de pagamento ainda
+    if (isFirstSnapshot) {
+      isFirstSnapshot = false
+      // Se já tiver status pago no primeiro snapshot, atualizar imediatamente
+      if (isPaid) {
+        console.log('[EventPayment] Firebase: Status pago detectado no primeiro snapshot, atualizando...')
+        lastPaymentUpdate = updateToken
+        await fetchRegistrations()
+        return
+      }
       lastPaymentUpdate = updateToken
+      return
+    }
+    
+    if (updateToken === lastPaymentUpdate || isFetching) return
+    lastPaymentUpdate = updateToken
+    
+    console.log('[EventPayment] Firebase: Atualização recebida', { 
+      payment_status: data.payment_status, 
+      status: data.status,
+      gateway_status: data.gateway_payload?.status,
+      isPaid 
+    })
+    
+    // Atualizar imediatamente se o status mudou para pago
+    if (isPaid) {
+      console.log('[EventPayment] Firebase: Status mudou para pago, atualizando imediatamente...')
+      if (!isFetching) {
+        isFetching = true
+        try {
+          await fetchRegistrations()
+        } finally {
+          isFetching = false
+        }
+      }
+      return
+    }
+    
+    // Para outras atualizações, usar debounce
+    if (fetchTimeout) {
+      clearTimeout(fetchTimeout)
+    }
+    fetchTimeout = setTimeout(async () => {
+      if (!isFetching) {
+        isFetching = true
+        try {
+          await fetchRegistrations()
+        } finally {
+          isFetching = false
+        }
+      }
+    }, 1000)
+  })
+  
+  // Também escutar por telefone como fallback
+  const phoneToUse = registrations.value.length > 0 && registrations.value[0].phone
+    ? registrations.value[0].phone.replace(/\D/g, '')
+    : paymentInfo.value?.gateway_payload?.customer?.phone?.replace(/\D/g, '') || null
+  
+  if (phoneToUse) {
+    const phoneRef = dbRef(db, `updates/${prefix}registrations_by_phone_${phoneToUse}`)
+    
+    let lastPhoneUpdate = null
+    let isFirstPhoneSnapshot = true
+    const phoneUnsubscribe = onValue(phoneRef, async (snapshot) => {
+      if (!snapshot.exists()) return
+      
+      const data = snapshot.val()
+      const updateToken = data.last_updated || data.updated_at || JSON.stringify(data)
+      
+      // Verificar se o status mudou para pago
+      const isPaid = data.payment_status === 'paid' || data.status === 'paid' || 
+                     data.gateway_payload?.status === 'CONFIRMED' || 
+                     data.gateway_payload?.status === 'RECEIVED'
+      
+      if (isFirstPhoneSnapshot) {
+        isFirstPhoneSnapshot = false
+        // Se já tiver status pago no primeiro snapshot, atualizar imediatamente
+        if (isPaid) {
+          console.log('[EventPayment] Firebase (phone): Status pago detectado no primeiro snapshot, atualizando...')
+          lastPhoneUpdate = updateToken
+          await fetchRegistrations()
+          return
+        }
+        lastPhoneUpdate = updateToken
+        return
+      }
+      
+      if (updateToken === lastPhoneUpdate || isFetching) return
+      lastPhoneUpdate = updateToken
+      
+      console.log('[EventPayment] Firebase (phone): Atualização recebida', { 
+        payment_status: data.payment_status, 
+        status: data.status,
+        gateway_status: data.gateway_payload?.status,
+        isPaid 
+      })
+      
+      // Atualizar imediatamente se o status mudou para pago
+      if (isPaid) {
+        console.log('[EventPayment] Firebase (phone): Status mudou para pago, atualizando imediatamente...')
+        if (!isFetching) {
+          isFetching = true
+          try {
+            await fetchRegistrations()
+          } finally {
+            isFetching = false
+          }
+        }
+        return
+      }
       
       if (fetchTimeout) {
         clearTimeout(fetchTimeout)
@@ -479,36 +612,6 @@ function setupFirebaseListener(paymentId) {
           }
         }
       }, 1000)
-    }
-  })
-  
-  if (registrations.value.length > 0 && registrations.value[0].phone) {
-    const phone = registrations.value[0].phone.replace(/\D/g, '')
-    const phoneRef = dbRef(db, `updates/${prefix}registrations_by_phone_${phone}`)
-    
-    let lastPhoneUpdate = null
-    const phoneUnsubscribe = onValue(phoneRef, async (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val()
-        const updateToken = data.last_updated || JSON.stringify(data)
-        
-        if (updateToken === lastPhoneUpdate || isFetching) return
-        lastPhoneUpdate = updateToken
-        
-        if (fetchTimeout) {
-          clearTimeout(fetchTimeout)
-        }
-        fetchTimeout = setTimeout(async () => {
-          if (!isFetching) {
-            isFetching = true
-            try {
-              await fetchRegistrations()
-            } finally {
-              isFetching = false
-            }
-          }
-        }, 1000)
-      }
     })
     
     const originalUnsubscribe = unsubscribe

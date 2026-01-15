@@ -8,9 +8,6 @@
         <RouterLink to="/events" class="text-lg font-semibold text-gray-700 hover:text-blue-600 transition">
           Eventos
         </RouterLink>
-        <RouterLink to="/orders" class="text-lg font-semibold text-gray-700 hover:text-green-600 transition">
-          Minhas Compras
-        </RouterLink>
         <RouterLink to="/registrations" class="text-lg font-semibold text-gray-700 hover:text-blue-600 transition">
           Minhas Inscrições
         </RouterLink>
