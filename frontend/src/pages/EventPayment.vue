@@ -14,9 +14,10 @@
 
       <div v-else-if="error" class="text-red-600 text-center font-medium py-6">{{ error }}</div>
 
-      <div v-else-if="paymentInfo || paymentData" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- Card do Pedido -->
-        <div class="bg-white rounded-2xl shadow-sm hover:shadow-xl transition overflow-hidden group flex flex-col p-4 border hover:border-green-200">
+      <div v-else-if="paymentInfo || paymentData" class="flex justify-center">
+        <div class="w-full max-w-2xl">
+          <!-- Card do Pedido -->
+          <div class="bg-white rounded-2xl shadow-sm hover:shadow-xl transition overflow-hidden group flex flex-col p-4 border hover:border-green-200">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-3">
               <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-50 group-hover:bg-green-100">
@@ -122,6 +123,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
 
@@ -255,9 +257,15 @@ function loadPaymentData() {
     const paymentParam = route.query.payment
     if (paymentParam) {
       paymentData.value = JSON.parse(decodeURIComponent(paymentParam))
+      console.log('[EventPayment] Payment data carregado:', { 
+        id: paymentData.value?.id,
+        method: paymentData.value?.method,
+        amount: paymentData.value?.amount
+      })
       
       // Configurar listener do Firebase imediatamente com o payment_id do paymentData
       if (paymentData.value?.id) {
+        console.log('[EventPayment] Configurando listener Firebase para:', paymentData.value.id)
         setupFirebaseListener(paymentData.value.id)
       }
       
@@ -322,9 +330,28 @@ async function fetchRegistrations() {
         }
         
         const { data } = await http.get(`/registrations/by-payment/${encodeURIComponent(cleanPaymentId)}`)
-        paymentInfo.value = data
+        console.log('[EventPayment] Dados recebidos do backend:', { 
+          payment_status: data.payment_status,
+          gateway_status: data.gateway_payload?.status,
+          payment_id: data.payment_id,
+          registrations_count: data.registrations?.length || 0
+        })
+        
+        // Atualizar paymentInfo de forma reativa
+        paymentInfo.value = { ...data }
         registrations.value = data.registrations || []
-        setupFirebaseListener(cleanPaymentId)
+        
+        console.log('[EventPayment] paymentInfo atualizado:', {
+          payment_status: paymentInfo.value.payment_status,
+          gateway_status: paymentInfo.value.gateway_payload?.status
+        })
+        console.log('[EventPayment] paymentStatus computed será:', paymentStatus.value)
+        
+        // Configurar listener APÓS atualizar paymentInfo (se ainda não estiver configurado)
+        if (!unsubscribe) {
+          setupFirebaseListener(cleanPaymentId)
+        }
+        
         loading.value = false
         isFetching = false
         return
@@ -401,23 +428,37 @@ async function fetchRegistrations() {
           if (foundPaymentId && foundPaymentId.length >= 8) {
             try {
               const { data: paymentDetails } = await http.get(`/registrations/by-payment/${foundPaymentId}`)
-              paymentInfo.value = paymentDetails
+              console.log('[EventPayment] Detalhes do pagamento encontrados:', {
+                payment_status: paymentDetails.payment_status,
+                gateway_status: paymentDetails.gateway_payload?.status
+              })
+              
+              // Atualizar paymentInfo de forma reativa
+              paymentInfo.value = { ...paymentDetails }
               registrations.value = paymentDetails.registrations || []
-              // Configurar listener após atualizar paymentInfo
-              setupFirebaseListener(foundPaymentId)
+              
+              console.log('[EventPayment] paymentInfo atualizado (via busca):', {
+                payment_status: paymentInfo.value.payment_status,
+                gateway_status: paymentInfo.value.gateway_payload?.status
+              })
+              
+              // Configurar listener após atualizar paymentInfo (se ainda não estiver configurado)
+              if (!unsubscribe) {
+                setupFirebaseListener(foundPaymentId)
+              }
             } catch (err) {
               console.warn('Erro ao buscar detalhes do pagamento:', err)
               // Fallback: usar dados encontrados mesmo sem detalhes
-              paymentInfo.value = found
+              paymentInfo.value = { ...found }
               registrations.value = found.registrations || []
-              if (foundPaymentId) {
+              if (foundPaymentId && !unsubscribe) {
                 setupFirebaseListener(foundPaymentId)
               }
             }
           } else {
-            paymentInfo.value = found
+            paymentInfo.value = { ...found }
             registrations.value = found.registrations || []
-            if (foundPaymentId) {
+            if (foundPaymentId && !unsubscribe) {
               setupFirebaseListener(foundPaymentId)
             }
           }
@@ -483,24 +524,37 @@ async function fetchRegistrations() {
 }
   
 function setupFirebaseListener(paymentId) {
-  if (unsubscribe) unsubscribe()
+  if (unsubscribe) {
+    console.log('[EventPayment] Removendo listener anterior')
+    unsubscribe()
+  }
   unsubscribe = null
   
   if (!paymentId) {
     // Tentar usar payment_id do paymentData se disponível
     paymentId = paymentData.value?.id || paymentInfo.value?.payment_id
-    if (!paymentId) return
+    if (!paymentId) {
+      console.warn('[EventPayment] Nenhum payment_id disponível para configurar listener')
+      return
+    }
   }
   
+  console.log('[EventPayment] Configurando listener Firebase para payment_id:', paymentId)
   const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
-  const paymentRef = dbRef(db, `updates/${prefix}registrations_by_payment_${paymentId}`)
+  const firebasePath = `updates/${prefix}registrations_by_payment_${paymentId}`
+  console.log('[EventPayment] Firebase path:', firebasePath)
+  const paymentRef = dbRef(db, firebasePath)
   let isFirstSnapshot = true
   
   unsubscribe = onValue(paymentRef, async (snapshot) => {
-    if (!snapshot.exists()) return
+    if (!snapshot.exists()) {
+      console.log('[EventPayment] Firebase: Snapshot não existe')
+      return
+    }
     
     // Sempre ignorar o primeiro snapshot (igual ao RegistrationsByCpf)
     if (isFirstSnapshot) {
+      console.log('[EventPayment] Firebase: Ignorando primeiro snapshot')
       isFirstSnapshot = false
       return
     }
@@ -509,19 +563,36 @@ function setupFirebaseListener(paymentId) {
     const token = payload.last_updated || payload.updated_at || JSON.stringify(payload)
     
     // Evitar atualizações duplicadas usando token global
-    if (token && token === lastUpdateToken) return
+    if (token && token === lastUpdateToken) {
+      console.log('[EventPayment] Firebase: Token duplicado, ignorando')
+      return
+    }
     lastUpdateToken = token
+    
+    console.log('[EventPayment] Firebase: Atualização recebida', { 
+      payment_status: payload.payment_status, 
+      status: payload.status,
+      gateway_status: payload.gateway_payload?.status,
+      token 
+    })
     
     // Recarregar dados quando houver atualização (igual ao RegistrationsByCpf)
     if (!isFetching) {
+      console.log('[EventPayment] Firebase: Recarregando dados...')
       isFetching = true
       try {
         await fetchRegistrations()
       } finally {
         isFetching = false
       }
+    } else {
+      console.log('[EventPayment] Firebase: Já está buscando, ignorando atualização')
     }
+  }, (error) => {
+    console.error('[EventPayment] Firebase: Erro no listener', error)
   })
+  
+  console.log('[EventPayment] Listener Firebase configurado com sucesso')
   
   // Também escutar por telefone como fallback (se tivermos registrations)
   const phoneToUse = registrations.value.length > 0 && registrations.value[0].phone
@@ -529,6 +600,7 @@ function setupFirebaseListener(paymentId) {
     : paymentInfo.value?.gateway_payload?.customer?.phone?.replace(/\D/g, '') || null
   
   if (phoneToUse) {
+    console.log('[EventPayment] Configurando listener Firebase por telefone:', phoneToUse)
     const phoneRef = dbRef(db, `updates/${prefix}registrations_by_phone_${phoneToUse}`)
     
     let isFirstPhoneSnapshot = true
@@ -537,6 +609,7 @@ function setupFirebaseListener(paymentId) {
       
       // Sempre ignorar o primeiro snapshot
       if (isFirstPhoneSnapshot) {
+        console.log('[EventPayment] Firebase (phone): Ignorando primeiro snapshot')
         isFirstPhoneSnapshot = false
         return
       }
@@ -545,18 +618,33 @@ function setupFirebaseListener(paymentId) {
       const token = payload.last_updated || payload.updated_at || JSON.stringify(payload)
       
       // Evitar atualizações duplicadas usando token global
-      if (token && token === lastUpdateToken) return
+      if (token && token === lastUpdateToken) {
+        console.log('[EventPayment] Firebase (phone): Token duplicado, ignorando')
+        return
+      }
       lastUpdateToken = token
+      
+      console.log('[EventPayment] Firebase (phone): Atualização recebida', { 
+        payment_status: payload.payment_status, 
+        status: payload.status,
+        gateway_status: payload.gateway_payload?.status,
+        token 
+      })
       
       // Recarregar dados quando houver atualização
       if (!isFetching) {
+        console.log('[EventPayment] Firebase (phone): Recarregando dados...')
         isFetching = true
         try {
           await fetchRegistrations()
         } finally {
           isFetching = false
         }
+      } else {
+        console.log('[EventPayment] Firebase (phone): Já está buscando, ignorando atualização')
       }
+    }, (error) => {
+      console.error('[EventPayment] Firebase (phone): Erro no listener', error)
     })
     
     const originalUnsubscribe = unsubscribe
@@ -568,6 +656,8 @@ function setupFirebaseListener(paymentId) {
         fetchTimeout = null
       }
     }
+  } else {
+    console.log('[EventPayment] Nenhum telefone disponível para listener')
   }
 }
 
