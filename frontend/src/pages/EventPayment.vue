@@ -194,6 +194,20 @@ function extractPaymentIdFromUrl(url) {
   return match ? match[1] : null
 }
 
+function extractPaymentIdFromPixPayload(payload) {
+  if (!payload) return null
+  // O payload do PIX pode conter a URL do QR code: pix-h.asaas.com/qr/cobv/c2fc42c7-b139-47f7-8172-b83d4fb16a78
+  // Tentar extrair o UUID do final
+  const match = payload.match(/qr\/cobv\/([a-f0-9-]+)/i)
+  if (match) return match[1]
+  
+  // Tentar extrair qualquer UUID do payload
+  const uuidMatch = payload.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+  if (uuidMatch) return uuidMatch[1]
+  
+  return null
+}
+
 async function fetchRegistrations() {
   try {
     let paymentId = null
@@ -206,6 +220,11 @@ async function fetchRegistrations() {
     // Se não, tentar extrair payment_id do boletoUrl
     if (!paymentId && paymentData.value?.boletoUrl) {
       paymentId = extractPaymentIdFromUrl(paymentData.value.boletoUrl)
+    }
+    
+    // Se não, tentar extrair do payload do PIX
+    if (!paymentId && paymentData.value?.pix?.payload) {
+      paymentId = extractPaymentIdFromPixPayload(paymentData.value.pix.payload)
     }
     
     // Se temos payment_id, buscar diretamente
@@ -239,13 +258,21 @@ async function fetchRegistrations() {
           if (paymentData.value?.pix?.payload) {
             return order.gateway_payload?.pixQrCode === paymentData.value.pix.payload
           }
+          // Procurar por valor e método de pagamento
+          if (paymentData.value?.amount) {
+            const orderAmount = order.total_amount / 100
+            const paymentAmount = paymentData.value.amount
+            return Math.abs(orderAmount - paymentAmount) < 0.01 && 
+                   order.payment_method === paymentData.value.method
+          }
           return false
         })
         
         if (found) {
           paymentInfo.value = found
           registrations.value = found.registrations || []
-          setupFirebaseListener(found.payment_id || found.id)
+          const foundPaymentId = found.payment_id || found.id
+          setupFirebaseListener(foundPaymentId)
           loading.value = false
           return
         }
@@ -260,6 +287,14 @@ async function fetchRegistrations() {
       payment_status: paymentData.value.creditCard?.status === 'CONFIRMED' ? 'paid' : 'pending',
       total_amount: paymentData.value.amount * 100,
       gateway_payload: paymentData.value
+    }
+    
+    // Tentar buscar novamente após alguns segundos caso não tenha encontrado
+    // Isso é útil quando o pagamento foi feito mas ainda não foi processado
+    if (!paymentId && paymentData.value.method === 'PIX') {
+      setTimeout(async () => {
+        await fetchRegistrations()
+      }, 5000) // Tentar novamente após 5 segundos
     }
   } catch (err) {
     console.error('Erro ao buscar registrations:', err)
@@ -278,25 +313,56 @@ async function fetchRegistrations() {
 let unsubscribe = null
 
 function setupFirebaseListener(paymentId) {
+  if (unsubscribe) unsubscribe()
+  unsubscribe = null
+  
   if (!paymentId) return
   
-  // Escutar atualizações das registrations pelo payment_id
-  // O backend atualiza em webhooks/registrations_{id} para cada registration
-  // E também em updates/registrations_by_phone_{phone}
+  const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
   
-  // Para simplificar, vamos escutar todas as registrations e verificar se alguma mudou
-  // Ou podemos escutar por phone se tivermos
+  // Escutar atualizações pelo payment_id (mais direto)
+  const paymentRef = dbRef(db, `updates/${prefix}registrations_by_payment_${paymentId}`)
+  let lastPaymentUpdate = null
+  unsubscribe = onValue(paymentRef, async (snapshot) => {
+    if (snapshot.exists()) {
+      const data = snapshot.val()
+      const updateToken = data.last_updated || JSON.stringify(data)
+      
+      // Evitar recarregar se for a mesma atualização
+      if (updateToken === lastPaymentUpdate) return
+      lastPaymentUpdate = updateToken
+      
+      // Recarregar sempre que houver atualização
+      await fetchRegistrations()
+    }
+  })
+  
+  // Também escutar por telefone como fallback
   if (registrations.value.length > 0 && registrations.value[0].phone) {
     const phone = registrations.value[0].phone.replace(/\D/g, '')
-    const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
-    const updatesRef = dbRef(db, `updates/${prefix}registrations_by_phone_${phone}`)
+    const phoneRef = dbRef(db, `updates/${prefix}registrations_by_phone_${phone}`)
     
-    unsubscribe = onValue(updatesRef, async (snapshot) => {
+    let lastPhoneUpdate = null
+    const phoneUnsubscribe = onValue(phoneRef, async (snapshot) => {
       if (snapshot.exists()) {
-        // Recarregar registrations quando houver atualização
+        const data = snapshot.val()
+        const updateToken = data.last_updated || JSON.stringify(data)
+        
+        // Evitar recarregar se for a mesma atualização
+        if (updateToken === lastPhoneUpdate) return
+        lastPhoneUpdate = updateToken
+        
+        // Recarregar sempre que houver atualização
         await fetchRegistrations()
       }
     })
+    
+    // Armazenar ambos os listeners
+    const originalUnsubscribe = unsubscribe
+    unsubscribe = () => {
+      if (originalUnsubscribe) originalUnsubscribe()
+      if (phoneUnsubscribe) phoneUnsubscribe()
+    }
   }
 }
 

@@ -42,7 +42,20 @@ class FirebaseService {
 
     public function update(string $path, array $data): bool {
         $url = $this->buildUrl($path);
-        $response = Http::timeout(5)->patch($url, $data);
+        
+        // Usar PUT para garantir que os dados sejam atualizados
+        // Firebase Realtime Database aceita tanto PATCH quanto PUT
+        $response = Http::timeout(10)->put($url, $data);
+        
+        if (!$response->successful()) {
+            \Log::warning('Falha ao atualizar Firebase', [
+                'path' => $path,
+                'url' => $url,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+        }
+        
         return $response->successful();
     }
 

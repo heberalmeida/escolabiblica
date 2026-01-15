@@ -163,7 +163,13 @@ class AsaasWebhookController extends Controller
                     ['event' => $event['event']]
                 );
                 
-                if ($paymentStatus !== 'pending') {
+                // Sempre atualizar o status se houver mudança
+                // Se o evento é PAYMENT_RECEIVED ou PAYMENT_CONFIRMED, sempre marcar como paid
+                if ($status === 'PAYMENT_RECEIVED' || $status === 'PAYMENT_CONFIRMED') {
+                    $registration->payment_status = 'paid';
+                } elseif ($paymentStatusFromPayload === 'CONFIRMED' || $paymentStatusFromPayload === 'RECEIVED') {
+                    $registration->payment_status = 'paid';
+                } elseif ($paymentStatus !== 'pending') {
                     $registration->payment_status = $paymentStatus;
                 }
                 
@@ -213,8 +219,11 @@ class AsaasWebhookController extends Controller
                 $prefix = config('firebase.collection_prefix', '');
 
                 foreach ($registrations as $registration) {
+                    // Recarregar a registration para garantir que temos os dados atualizados
+                    $registration->refresh();
+                    
                     // Atualizar informações da registration no Firebase
-                    $firebase->update("webhooks/registrations_{$registration->id}", [
+                    $firebaseUpdated = $firebase->update("webhooks/registrations_{$registration->id}", [
                         'id'            => $registration->id,
                         'registration_number' => $registration->registration_number,
                         'qr_code'       => $registration->qr_code,
@@ -230,20 +239,61 @@ class AsaasWebhookController extends Controller
                         'updated_at'    => now()->toIso8601String(),
                     ]);
 
+                    if (!$firebaseUpdated) {
+                        Log::warning('Falha ao atualizar Firebase para registration', [
+                            'registration_id' => $registration->id,
+                            'payment_id' => $paymentId,
+                        ]);
+                    }
+
                     // Atualizar notificação de mudança por telefone (se necessário)
                     if ($registration->phone) {
-                        $firebase->update("updates/{$prefix}registrations_by_phone_{$registration->phone}", [
+                        // Limpar telefone de caracteres especiais para usar no path do Firebase
+                        $cleanPhone = preg_replace('/\D/', '', $registration->phone);
+                        $phoneUpdated = $firebase->update("updates/{$prefix}registrations_by_phone_{$cleanPhone}", [
                             'last_updated' => now()->toIso8601String(),
                             'registration_id' => $registration->id,
                             'payment_status' => $registration->payment_status,
+                            'payment_id' => $paymentId,
+                        ]);
+                        
+                        if (!$phoneUpdated) {
+                            Log::warning('Falha ao atualizar Firebase por telefone', [
+                                'phone' => $cleanPhone,
+                                'registration_id' => $registration->id,
+                            ]);
+                        }
+                    }
+                }
+                
+                // Atualizar por payment_id uma vez para todas as registrations
+                if ($paymentId) {
+                    $firstRegistration = $registrations->first();
+                    $paymentUpdated = $firebase->update("updates/{$prefix}registrations_by_payment_{$paymentId}", [
+                        'last_updated' => now()->toIso8601String(),
+                        'payment_status' => $firstRegistration->payment_status ?? 'pending',
+                        'registration_ids' => $registrations->pluck('id')->toArray(),
+                        'payment_id' => $paymentId,
+                    ]);
+                    
+                    if (!$paymentUpdated) {
+                        Log::warning('Falha ao atualizar Firebase por payment_id', [
+                            'payment_id' => $paymentId,
                         ]);
                     }
+                    
+                    Log::info('Firebase atualizado para registrations', [
+                        'payment_id' => $paymentId,
+                        'registrations_count' => $registrations->count(),
+                        'payment_status' => $firstRegistration->payment_status ?? 'unknown',
+                    ]);
                 }
             } catch (\Throwable $e) {
                 Log::error('Erro ao atualizar Firebase para Registrations', [
                     'payment_id' => $paymentId,
                     'registrations_count' => $registrations->count(),
                     'message'  => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
                 ]);
             }
         }

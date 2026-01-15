@@ -34,97 +34,77 @@
       <div v-else>
         <p v-if="error" class="text-red-600 mb-6 text-center">{{ error }}</p>
 
-        <div v-if="registrations.length">
+        <div v-if="orders.length">
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="reg in registrations" :key="reg.id"
+            <div v-for="order in orders" :key="order.id"
               class="bg-white rounded-2xl shadow-sm hover:shadow-xl transition overflow-hidden group flex flex-col p-4 border hover:border-blue-200">
             <div class="flex items-center justify-between mb-3">
               <div class="flex items-center gap-3">
                 <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100">
-                  <font-awesome-icon :icon="['fas', 'calendar']" class="text-blue-600 text-lg" />
+                  <font-awesome-icon :icon="['fas', 'shopping-cart']" class="text-blue-600 text-lg" />
                 </div>
                 <div>
-                  <p class="font-bold text-lg leading-tight">{{ reg.event?.name }}</p>
-                  <p class="text-xs text-gray-500">Inscrição #{{ reg.registration_number }}</p>
+                  <p class="font-bold text-lg leading-tight">Pedido</p>
+                  <p class="text-xs text-gray-500">{{ order.payment_id || 'Gratuito' }}</p>
                 </div>
               </div>
               <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold"
-                :class="statusPillClass(reg.payment_status)">
-                <font-awesome-icon :icon="statusIcon(reg.payment_status)" />
-                {{ statusLabel(reg.payment_status) }}
+                :class="statusPillClass(order.payment_status)">
+                <font-awesome-icon :icon="statusIcon(order.payment_status)" />
+                {{ statusLabel(order.payment_status) }}
               </span>
             </div>
 
             <div class="flex flex-col gap-2 text-sm text-gray-600 mb-4">
-              <div><strong>Nome:</strong> {{ reg.name }}</div>
-              <div><strong>Telefone:</strong> {{ reg.phone }}</div>
-              <div v-if="reg.cpf"><strong>CPF:</strong> {{ formatCpf(reg.cpf) }}</div>
-              <div><strong>Data de Nascimento:</strong> {{ formatDate(reg.birth_date) }}</div>
-              <div v-if="reg.gender"><strong>Gênero:</strong> {{ reg.gender === 'MASCULINO' ? 'Masculino' : 'Feminino' }}</div>
-              <div v-if="reg.congregation"><strong>Congregação:</strong> {{ reg.congregation }}</div>
-              <div v-if="reg.sector"><strong>Setor:</strong> {{ reg.sector }}</div>
-              <div v-if="reg.church_type"><strong>Tipo:</strong> {{ reg.church_type }}</div>
-              <div v-if="reg.whatsapp_authorization !== null">
-                <strong>Autoriza WhatsApp:</strong> {{ reg.whatsapp_authorization ? 'Sim' : 'Não' }}
+              <div>
+                <strong>Inscrições:</strong>
+                <span class="font-bold text-gray-900">{{ order.registrations_count || order.registrations?.length || 0 }}</span>
               </div>
               <div>
-                <strong>Valor:</strong>
-                <span class="font-bold text-gray-900">
-                  {{ reg.price_paid === 0 ? 'Gratuito' : formatBRL(reg.price_paid) }}
+                <strong>Valor Total:</strong>
+                <span class="font-bold text-gray-900 text-lg">
+                  {{ formatBRL(order.total_amount || 0) }}
                 </span>
               </div>
-              <div v-if="reg.payment_method">
-                <strong>Método de Pagamento:</strong> {{ formatPaymentMethod(reg.payment_method) }}
+              <div v-if="order.payment_method">
+                <strong>Método de Pagamento:</strong> {{ formatPaymentMethod(order.payment_method) }}
               </div>
-              <div><strong>Data da Inscrição:</strong> {{ formatDateTime(reg.created_at) }}</div>
+              <div><strong>Data do Pedido:</strong> {{ formatDateTime(order.created_at) }}</div>
+              
+              <!-- Lista resumida de inscrições -->
+              <div class="mt-2 pt-2 border-t border-gray-200">
+                <p class="text-xs font-semibold text-gray-500 mb-1">Inscrições neste pedido:</p>
+                <div class="space-y-1">
+                  <div v-for="reg in order.registrations" :key="reg.id" class="text-xs text-gray-600">
+                    • {{ reg.name }} - {{ reg.event?.name || 'Evento' }}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="mt-auto space-y-2">
-              <div v-if="reg.validated" class="bg-green-50 border border-green-200 rounded-lg p-2 text-sm text-green-700">
-                <div class="flex items-center gap-2">
-                  <font-awesome-icon :icon="['fas', 'check-circle']" />
-                  <span>Validado em {{ formatDateTime(reg.validated_at) }}</span>
-                </div>
+              <div v-if="order.payment_status === 'paid'" class="space-y-2">
+                <button @click="printOrder(order)"
+                  class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2">
+                  <font-awesome-icon :icon="['fas', 'print']" />
+                  Imprimir Inscrições ({{ order.registrations_count || order.registrations?.length || 0 }})
+                </button>
               </div>
               <div v-else class="bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-sm text-yellow-700">
                 <div class="flex items-center gap-2">
-                  <font-awesome-icon :icon="['fas', 'clock']" />
-                  <span>Pendente de validação</span>
-                </div>
-              </div>
-              <div v-if="reg.payment_status === 'paid' && reg.qr_code" class="space-y-2">
-                <div v-if="hasQrCode(reg.id)" class="bg-white p-4 rounded-lg border-2 border-blue-600 flex justify-center">
-                  <div :id="`qr-${reg.id}`" class="w-full flex justify-center"></div>
-                </div>
-                <button @click="printRegistration(reg)"
-                  class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2">
-                  <font-awesome-icon :icon="['fas', 'print']" />
-                  Imprimir
-                </button>
-              </div>
-              <div v-else-if="reg.payment_status !== 'paid'" class="bg-red-50 border border-red-200 rounded-lg p-2 text-sm text-red-700">
-                <div class="flex items-center gap-2">
-                  <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
-                  <span>QR Code disponível após confirmação do pagamento</span>
+                  <font-awesome-icon :icon="['fas', 'hourglass-half']" />
+                  <span>Aguardando confirmação do pagamento</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div v-if="paidRegistrations.length > 0" class="mt-6 flex justify-center">
-          <button @click="printAll"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition flex items-center gap-2">
-            <font-awesome-icon :icon="['fas', 'print']" />
-            Imprimir Todas as Inscrições Pagas
-          </button>
-        </div>
-
-        <Pagination v-if="registrations.length" class="mt-8" :current-page="currentPage" :last-page="lastPage"
+        <Pagination v-if="orders.length" class="mt-8" :current-page="currentPage" :last-page="lastPage"
           @change="page => search(false, page)" />
         </div>
 
-        <p v-if="!registrations.length && !error" class="text-gray-600 text-center mt-10">Nenhuma inscrição encontrada.</p>
+        <p v-if="!orders.length && !error" class="text-gray-600 text-center mt-10">Nenhum pedido encontrado.</p>
       </div>
     </div>
   </div>
@@ -163,6 +143,9 @@ const { data: savedCpf, set: setCpfSession, clear: clearCpfSession } = useSessio
 const unsubscribeFns = ref([])
 let lastUpdateToken = null
 
+const orders = ref([]) // Pedidos agrupados
+const allRegistrations = ref([]) // Todas as registrations para impressão
+
 onMounted(() => {
   if (savedCpf.value) {
     cpf.value = savedCpf.value
@@ -170,8 +153,8 @@ onMounted(() => {
   }
 })
 
-// Observar mudanças nas inscrições para gerar QR codes
-watch(registrations, async () => {
+// Observar mudanças nos pedidos para gerar QR codes
+watch([orders, allRegistrations], async () => {
   await nextTick()
   await generateQRCodes()
 }, { deep: true })
@@ -184,10 +167,53 @@ async function search(setupListeners = false, page = 1) {
   }
   loading.value = true
   error.value = null
-  registrations.value = []
+  orders.value = []
+  allRegistrations.value = []
   try {
-    const { data } = await registrationsApi.getByCpf(cleanCpf, { page, per_page: 6 })
-    registrations.value = data.data || data
+    // Buscar registrations agrupadas por pagamento
+    const { data } = await registrationsApi.getByCpf(cleanCpf, { page, per_page: 10, group_by_payment: true })
+    
+    if (data.data && Array.isArray(data.data)) {
+      // Dados já vêm agrupados do backend
+      orders.value = data.data
+      
+      // Coletar todas as registrations para impressão e QR codes
+      data.data.forEach(order => {
+        if (order.registrations && Array.isArray(order.registrations)) {
+          order.registrations.forEach(reg => {
+            allRegistrations.value.push(reg)
+          })
+        }
+      })
+    } else {
+      // Fallback: agrupar manualmente se o backend não suportar
+      const registrationsList = data.data || data
+      const grouped = {}
+      
+      registrationsList.forEach(reg => {
+        const key = reg.asaas_payment_id || `free_${reg.created_at}`
+        if (!grouped[key]) {
+          grouped[key] = {
+            id: reg.asaas_payment_id || `free_${reg.id}`,
+            payment_id: reg.asaas_payment_id,
+            payment_method: reg.payment_method,
+            payment_status: reg.payment_status,
+            total_amount: 0,
+            registrations: [],
+            created_at: reg.created_at,
+            gateway_payload: reg.gateway_payload
+          }
+        }
+        grouped[key].total_amount += reg.price_paid || 0
+        grouped[key].registrations.push(reg)
+        allRegistrations.value.push(reg)
+      })
+      
+      orders.value = Object.values(grouped).sort((a, b) => 
+        new Date(b.created_at) - new Date(a.created_at)
+      )
+    }
+    
     currentPage.value = data.current_page || 1
     lastPage.value = data.last_page || 1
     setCpfSession(cpf.value)
@@ -216,13 +242,43 @@ function bindRealtimeUpdates(cleanCpf) {
   unsubscribeFns.value.forEach(fn => fn && fn())
   unsubscribeFns.value = []
   
-  // Escutar atualizações por telefone (se tivermos registrations)
-  if (registrations.value.length > 0) {
-    const phones = [...new Set(registrations.value.map(r => r.phone).filter(Boolean))]
+  const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
+  
+  // Escutar atualizações por payment_id (mais eficiente)
+  if (orders.value.length > 0) {
+    const paymentIds = [...new Set(orders.value.map(o => o.payment_id).filter(Boolean))]
+    
+    paymentIds.forEach(paymentId => {
+      const paymentRef = dbRef(db, `updates/${prefix}registrations_by_payment_${paymentId}`)
+      
+      let isFirstSnapshot = true
+      const unsubscribe = onValue(paymentRef, async (snapshot) => {
+        if (!snapshot.exists()) return
+        
+        if (isFirstSnapshot) {
+          isFirstSnapshot = false
+          return
+        }
+        
+        const payload = snapshot.val()
+        const token = payload.last_updated || payload.updated_at || JSON.stringify(payload)
+        if (token && token === lastUpdateToken) return
+        lastUpdateToken = token
+        
+        // Recarregar registrations quando houver atualização
+        await search(false, currentPage.value)
+      })
+      
+      unsubscribeFns.value.push(unsubscribe)
+    })
+  }
+  
+  // Também escutar por telefone como fallback (se tivermos registrations)
+  if (allRegistrations.value.length > 0) {
+    const phones = [...new Set(allRegistrations.value.map(r => r.phone).filter(Boolean))]
     
     phones.forEach(phone => {
       const cleanPhone = phone.replace(/\D/g, '')
-      const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
       const updatesRef = dbRef(db, `updates/${prefix}registrations_by_phone_${cleanPhone}`)
       
       let isFirstSnapshot = true
@@ -249,13 +305,13 @@ function bindRealtimeUpdates(cleanCpf) {
 }
 
 async function generateQRCodes() {
-  if (!registrations.value || registrations.value.length === 0) return
+  if (!allRegistrations.value || allRegistrations.value.length === 0) return
   
   // Aguardar renderização do DOM
   await nextTick()
   await new Promise(resolve => setTimeout(resolve, 200))
   
-  for (const reg of registrations.value) {
+  for (const reg of allRegistrations.value) {
     if (reg.payment_status === 'paid' && reg.qr_code) {
       try {
         const containerId = `qr-${reg.id}`
@@ -277,8 +333,6 @@ async function generateQRCodes() {
           // Marcar como gerado apenas após sucesso
           qrCodeGenerated.value.add(reg.id)
           console.log(`QR Code gerado para registro ${reg.id}`)
-        } else {
-          console.warn(`Container não encontrado: ${containerId} para registro ${reg.id}, payment_status: ${reg.payment_status}, qr_code: ${reg.qr_code ? 'existe' : 'não existe'}`)
         }
       } catch (error) {
         console.error(`Erro ao gerar QR code para registro ${reg.id}:`, error)
@@ -288,13 +342,123 @@ async function generateQRCodes() {
 }
 
 const paidRegistrations = computed(() => {
-  return registrations.value.filter(reg => reg.payment_status === 'paid')
+  return allRegistrations.value.filter(reg => reg.payment_status === 'paid')
 })
 
 const qrCodeGenerated = ref(new Set())
 
 function hasQrCode(regId) {
   return qrCodeGenerated.value.has(regId)
+}
+
+async function printOrder(order) {
+  // Imprimir todas as inscrições do pedido
+  const registrations = order.registrations || []
+  const paidRegs = registrations.filter(reg => reg.payment_status === 'paid' && reg.qr_code)
+  
+  if (paidRegs.length === 0) {
+    alert('Nenhuma inscrição paga para imprimir neste pedido.')
+    return
+  }
+  
+  // Gerar todos os QR codes como imagens base64 antes de abrir a janela
+  const qrCodeImages = {}
+  for (const reg of paidRegs) {
+    try {
+      qrCodeImages[reg.id] = await QRCode.toDataURL(reg.qr_code, {
+        width: 250,
+        margin: 2,
+        errorCorrectionLevel: 'M'
+      })
+    } catch (error) {
+      console.error(`Erro ao gerar QR code para registro ${reg.id}:`, error)
+      qrCodeImages[reg.id] = ''
+    }
+  }
+  
+  const printWindow = window.open('', '_blank')
+  const printedDate = new Date().toLocaleString('pt-BR')
+  const totalAmount = formatBRL(order.total_amount || 0)
+  const registrationsCount = order.registrations_count || registrations.length
+  
+  const styleClose = '<' + '/' + 'style>'
+  const headClose = '<' + '/' + 'head>'
+  const bodyClose = '<' + '/' + 'body>'
+  const htmlClose = '<' + '/' + 'html>'
+  
+  let htmlContent = [
+    '<!DOCTYPE html>',
+    '<html>',
+    '<head>',
+    '<title>Pedido - ' + (order.payment_id || 'Gratuito') + '</title>',
+    '<style>',
+    '@media print { @page { size: A4; margin: 15mm; } .registration-card { page-break-inside: avoid; margin-bottom: 30px; } }',
+    'body { font-family: Arial, sans-serif; padding: 20px; }',
+    '.header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 20px; margin-bottom: 30px; }',
+    '.header h1 { color: #2563eb; margin: 0; }',
+    '.order-info { background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px; }',
+    '.order-info-row { display: flex; justify-content: space-between; padding: 5px 0; }',
+    '.registration-card { border: 2px solid #2563eb; border-radius: 8px; padding: 20px; margin-bottom: 30px; }',
+    '.info { margin-bottom: 20px; }',
+    '.info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }',
+    '.info-label { font-weight: bold; color: #374151; }',
+    '.qr-code { text-align: center; margin: 20px 0; padding: 15px; border: 2px solid #2563eb; border-radius: 8px; }',
+    '.qr-code img { max-width: 100%; height: auto; }',
+    styleClose,
+    headClose,
+    '<body>',
+    '<div class="header">',
+    '<h1>Comprovante de Pedido</h1>',
+    '<p>Pedido: ' + (order.payment_id || 'Gratuito') + '</p>',
+    '</div>',
+    '<div class="order-info">',
+    '<div class="order-info-row"><span class="info-label">Total de Inscrições:</span><span>' + registrationsCount + '</span></div>',
+    '<div class="order-info-row"><span class="info-label">Valor Total Pago:</span><span style="font-weight: bold; font-size: 1.2em;">' + totalAmount + '</span></div>',
+    '<div class="order-info-row"><span class="info-label">Método de Pagamento:</span><span>' + formatPaymentMethod(order.payment_method) + '</span></div>',
+    '<div class="order-info-row"><span class="info-label">Status:</span><span style="color: #10b981; font-weight: bold;">Pago</span></div>',
+    '</div>'
+  ].join('\n')
+  
+  paidRegs.forEach((reg) => {
+    const formattedCpf = reg.cpf ? formatCpf(reg.cpf) : '-'
+    const formattedPrice = reg.price_paid === 0 ? 'Gratuito' : formatBRL(reg.price_paid)
+    const eventName = reg.event?.name || 'Evento'
+    const qrImage = qrCodeImages[reg.id] || ''
+    
+    htmlContent += [
+      '<div class="registration-card">',
+      '<h2 style="color: #2563eb; margin-top: 0;">' + eventName + '</h2>',
+      '<div class="info">',
+      '<div class="info-row"><span class="info-label">Número de Inscrição:</span><span>' + reg.registration_number + '</span></div>',
+      '<div class="info-row"><span class="info-label">Nome:</span><span>' + reg.name + '</span></div>',
+      '<div class="info-row"><span class="info-label">CPF:</span><span>' + formattedCpf + '</span></div>',
+      '<div class="info-row"><span class="info-label">Telefone:</span><span>' + (reg.phone || '-') + '</span></div>',
+      '<div class="info-row"><span class="info-label">Valor Pago:</span><span>' + formattedPrice + '</span></div>',
+      '</div>',
+      '<div class="qr-code">',
+      '<p style="margin-bottom: 10px; font-weight: bold;">QR Code - Inscrição #' + reg.registration_number + '</p>',
+      qrImage ? '<img src="' + qrImage + '" alt="QR Code" />' : '<p style="color: red;">Erro ao gerar QR Code</p>',
+      '</div>',
+      '</div>'
+    ].join('\n')
+  })
+  
+  htmlContent += [
+    '<div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">',
+    '<p>Impresso em: ' + printedDate + '</p>',
+    '</div>',
+    bodyClose,
+    htmlClose
+  ].join('\n')
+  
+  printWindow.document.write(htmlContent)
+  printWindow.document.close()
+  
+  printWindow.onload = () => {
+    setTimeout(() => {
+      printWindow.print()
+    }, 300)
+  }
 }
 
 async function printRegistration(registration) {
@@ -481,7 +645,8 @@ function validateCpf(c) {
 
 function logout() {
   cpf.value = ''
-  registrations.value = []
+  orders.value = []
+  allRegistrations.value = []
   error.value = null
   clearCpfSession()
   unsubscribeFns.value.forEach(fn => fn && fn())

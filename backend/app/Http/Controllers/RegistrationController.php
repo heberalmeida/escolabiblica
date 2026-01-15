@@ -465,19 +465,134 @@ class RegistrationController extends Controller
     {
         $cpf = preg_replace('/\D/', '', $cpf);
         $perPage = $request->input('per_page', 10);
+        $groupByPayment = $request->input('group_by_payment', false); // Por padrão não agrupa para manter compatibilidade
 
-        $registrations = Registration::with('event')
+        $query = Registration::with('event')
             ->where('cpf', $cpf)
-            ->orderByDesc('created_at')
-            ->paginate($perPage);
+            ->orderByDesc('created_at');
 
-        if ($registrations->isEmpty()) {
+        // Se não agrupar, retornar lista simples
+        if (!$groupByPayment) {
+            $registrations = $query->paginate($perPage);
+
+            if ($registrations->isEmpty()) {
+                return response()->json([
+                    'message' => 'Nenhuma inscrição encontrada para este CPF.'
+                ], 404);
+            }
+
+            return response()->json($registrations, 200);
+        }
+
+        // Agrupar por pagamento
+        $allRegistrations = $query->get();
+
+        if ($allRegistrations->isEmpty()) {
             return response()->json([
                 'message' => 'Nenhuma inscrição encontrada para este CPF.'
             ], 404);
         }
 
-        return response()->json($registrations, 200);
+        // Agrupar registrations por payment_id
+        $grouped = [];
+        foreach ($allRegistrations as $registration) {
+            $groupKey = $registration->asaas_payment_id 
+                ? 'payment_' . $registration->asaas_payment_id 
+                : 'free_' . $registration->created_at->format('Y-m-d_H-i-s') . '_' . $registration->id;
+
+            if (!isset($grouped[$groupKey])) {
+                $grouped[$groupKey] = [
+                    'payment_id' => $registration->asaas_payment_id,
+                    'payment_method' => $registration->payment_method,
+                    'payment_status' => $registration->payment_status,
+                    'created_at' => $registration->created_at,
+                    'updated_at' => $registration->updated_at,
+                    'gateway_payload' => $registration->gateway_payload,
+                    'total_amount' => 0,
+                    'registrations' => [],
+                ];
+            }
+
+            $grouped[$groupKey]['total_amount'] += $registration->price_paid;
+            $grouped[$groupKey]['registrations'][] = $registration;
+            
+            // Atualizar created_at e updated_at
+            if ($registration->created_at < $grouped[$groupKey]['created_at']) {
+                $grouped[$groupKey]['created_at'] = $registration->created_at;
+            }
+            if ($registration->updated_at && $registration->updated_at > $grouped[$groupKey]['updated_at']) {
+                $grouped[$groupKey]['updated_at'] = $registration->updated_at;
+            }
+        }
+
+        // Converter para array e ordenar
+        $orders = array_values($grouped);
+        usort($orders, function ($a, $b) {
+            return $b['created_at'] <=> $a['created_at'];
+        });
+
+        // Paginar manualmente
+        $page = $request->input('page', 1);
+        $offset = ($page - 1) * $perPage;
+        $paginatedOrders = array_slice($orders, $offset, $perPage);
+        $total = count($orders);
+
+        // Formatar resposta
+        $formattedOrders = array_map(function ($order) {
+            return [
+                'id' => $order['payment_id'] ?? 'free_' . $order['created_at']->format('YmdHis'),
+                'payment_id' => $order['payment_id'],
+                'payment_method' => $order['payment_method'],
+                'payment_status' => $order['payment_status'],
+                'total_amount' => $order['total_amount'],
+                'total_amount_formatted' => number_format($order['total_amount'] / 100, 2, ',', '.'),
+                'created_at' => $order['created_at']->toIso8601String(),
+                'updated_at' => $order['updated_at']->toIso8601String(),
+                'gateway_payload' => $order['gateway_payload'],
+                'registrations_count' => count($order['registrations']),
+                'registrations' => collect($order['registrations'])->map(function ($reg) {
+                    return [
+                        'id' => $reg->id,
+                        'registration_number' => $reg->registration_number,
+                        'qr_code' => $reg->qr_code,
+                        'name' => $reg->name,
+                        'phone' => $reg->phone,
+                        'cpf' => $reg->cpf,
+                        'birth_date' => $reg->birth_date?->format('Y-m-d'),
+                        'sector' => $reg->sector,
+                        'congregation' => $reg->congregation,
+                        'church_type' => $reg->church_type,
+                        'gender' => $reg->gender,
+                        'price_paid' => $reg->price_paid,
+                        'price_paid_formatted' => number_format($reg->price_paid / 100, 2, ',', '.'),
+                        'payment_status' => $reg->payment_status,
+                        'validated' => $reg->validated,
+                        'validated_at' => $reg->validated_at?->toIso8601String(),
+                        'validated_by' => $reg->validated_by,
+                        'asaas_payment_id' => $reg->asaas_payment_id,
+                        'event' => $reg->event ? [
+                            'id' => $reg->event->id,
+                            'name' => $reg->event->name,
+                            'description' => $reg->event->description,
+                            'start_date' => $reg->event->start_date?->format('Y-m-d'),
+                            'end_date' => $reg->event->end_date?->format('Y-m-d'),
+                            'price' => $reg->event->price,
+                            'image' => $reg->event->image,
+                        ] : null,
+                        'created_at' => $reg->created_at->toIso8601String(),
+                        'updated_at' => $reg->updated_at->toIso8601String(),
+                    ];
+                })->values(),
+            ];
+        }, $paginatedOrders);
+
+        return response()->json([
+            'data' => $formattedOrders,
+            'current_page' => (int) $page,
+            'per_page' => (int) $perPage,
+            'total' => $total,
+            'last_page' => (int) ceil($total / $perPage),
+        ], 200);
     }
 
     public function getByPaymentId(string $paymentId)

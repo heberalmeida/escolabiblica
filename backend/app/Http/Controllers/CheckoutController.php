@@ -60,6 +60,12 @@ class CheckoutController extends Controller
                 ];
             }
 
+            // Calcular taxas ANTES de criar o Order
+            $fixCents  = (int) ($data['payment']['tax']['fix'] ?? 0);
+            $percent   = (float) ($data['payment']['tax']['percent'] ?? 0);
+            $percentCents = (int) round($totalCents * ($percent / 100));
+            $valueWithTaxCents = $totalCents + $fixCents + $percentCents;
+
             $customer = $asaas->ensureCustomer([
                 'name'  => $data['buyer']['name'],
                 'cpf'   => $data['buyer']['cpf'],
@@ -82,7 +88,7 @@ class CheckoutController extends Controller
                 'buyer_city'       => $data['buyer']['city'],
                 'buyer_state'      => $data['buyer']['state'],
                 'sector_id'        => $data['sector_id'],
-                'total_amount'     => $totalCents / 100,
+                'total_amount'     => $valueWithTaxCents, // Salvar valor COM taxas em centavos
                 'status'           => 'pending',
                 'payment_method'   => $data['payment']['method'],
                 'asaas_customer_id'=> $customer['id'] ?? null,
@@ -116,11 +122,6 @@ class CheckoutController extends Controller
                     ]),
                 ]);
             }
-
-            $fixCents  = (int) ($data['payment']['tax']['fix'] ?? 0);
-            $percent   = (float) ($data['payment']['tax']['percent'] ?? 0);
-            $percentCents = (int) round($totalCents * ($percent / 100));
-            $valueWithTaxCents = $totalCents + $fixCents + $percentCents;
 
             $payload = [
                 'customer'    => $order->asaas_customer_id,
@@ -191,10 +192,25 @@ class CheckoutController extends Controller
                 'totalValue'         => $charge['totalValue'] ?? null,
             ]);
 
+            // Atualizar o total_amount com o valor final retornado pelo Asaas (se disponível)
+            // Isso garante que temos o valor exato que foi cobrado, incluindo taxas aplicadas pelo gateway
+            $finalAmountCents = $valueWithTaxCents; // Valor calculado com taxas
+            if (isset($charge['totalValue'])) {
+                // Se o Asaas retornou um totalValue, usar esse (pode ter taxas adicionais do gateway)
+                $finalAmountCents = (int) round((float) $charge['totalValue'] * 100);
+            } elseif (isset($charge['value'])) {
+                // Se não tem totalValue mas tem value, usar esse
+                $finalAmountCents = (int) round((float) $charge['value'] * 100);
+            }
+
             $order->update([
                 'asaas_payment_id' => $charge['id'] ?? null,
                 'gateway_payload'  => $gatewayPayload,
+                'total_amount'     => $finalAmountCents, // Atualizar com valor final incluindo taxas
             ]);
+
+            // Recarregar o order para ter os dados atualizados
+            $order->refresh();
 
             try {
                 $firebase = app(FirebaseService::class);
@@ -222,7 +238,7 @@ class CheckoutController extends Controller
             $response = [
                 'orderNumber' => $order->order_number,
                 'status'      => $order->status,
-                'amount'      => $order->total_amount,
+                'amount'      => $order->total_amount / 100, // Converter centavos para reais na resposta
                 'payment'     => [
                     'method' => $data['payment']['method'],
                     'boletoUrl' => $charge['bankSlipUrl'] ?? null,
@@ -269,6 +285,7 @@ class CheckoutController extends Controller
             'payment.method'        => 'required|in:BOLETO,PIX,CREDIT_CARD,FREE',
             'payment.card'          => 'nullable|array',
             'payment.installments'  => 'nullable|integer|min:1|max:21',
+            'payment.tax'           => 'nullable|array',
         ];
 
         // Verificar se há eventos pagos para exigir endereço
@@ -360,6 +377,41 @@ class CheckoutController extends Controller
                 ], 201);
             }
 
+            // Calcular taxas ANTES de processar pagamento
+            $fixCents = 0;
+            $percent = 0.0;
+            $installments = (int) ($data['payment']['installments'] ?? 1);
+
+            // Se as taxas vieram no payload, usar elas
+            if (isset($data['payment']['tax'])) {
+                $fixCents = (int) ($data['payment']['tax']['fix'] ?? 0);
+                $percent = (float) ($data['payment']['tax']['percent'] ?? 0);
+            } else {
+                // Calcular taxas baseado no método de pagamento (mesma lógica do frontend)
+                if ($data['payment']['method'] === 'PIX') {
+                    $fixCents = 199; // R$ 1,99
+                    $percent = 0;
+                } elseif ($data['payment']['method'] === 'BOLETO') {
+                    $fixCents = 199; // R$ 1,99
+                    $percent = 0;
+                } elseif ($data['payment']['method'] === 'CREDIT_CARD') {
+                    $fixCents = 49; // R$ 0,49
+                    // Calcular percentual baseado no número de parcelas
+                    if ($installments === 1) {
+                        $percent = 2.99;
+                    } elseif ($installments >= 2 && $installments <= 6) {
+                        $percent = 3.49 + (1.70 * $installments);
+                    } elseif ($installments >= 7 && $installments <= 12) {
+                        $percent = 3.99 + (1.70 * $installments);
+                    } elseif ($installments >= 13 && $installments <= 21) {
+                        $percent = 4.29 + (1.70 * $installments);
+                    }
+                }
+            }
+
+            $percentCents = (int) round($totalAmount * ($percent / 100));
+            $valueWithTaxCents = $totalAmount + $fixCents + $percentCents;
+
             // Processar pagamento
             $customerData = [
                 'name'  => $data['buyer']['name'],
@@ -388,8 +440,6 @@ class CheckoutController extends Controller
                 'dueDate' => now()->addDays(1)->format('Y-m-d'), // Adicionar 1 dia para dar tempo de pagamento
             ];
 
-            $installments = (int) ($data['payment']['installments'] ?? 1);
-
             if ($data['payment']['method'] === 'CREDIT_CARD') {
                 if (!isset($data['payment']['card'])) {
                     return response()->json([
@@ -404,7 +454,7 @@ class CheckoutController extends Controller
                         'description' => 'Inscrições em Eventos',
                         'dueDate' => now()->addDays(3)->toDateString(),
                         'installmentCount' => $installments,
-                        'totalValue' => number_format($totalAmount / 100, 2, '.', ''),
+                        'totalValue' => number_format($valueWithTaxCents / 100, 2, '.', ''), // Enviar valor COM taxas
                         'creditCard' => $data['payment']['card'],
                         'creditCardHolderInfo' => [
                             'name' => $data['buyer']['name'],
@@ -428,21 +478,39 @@ class CheckoutController extends Controller
                     );
                     $payload['creditCardToken'] = $cardToken['creditCardToken'] ?? null;
                     $payload['remoteIp'] = request()->ip();
-                    $payload['value'] = number_format($totalAmount / 100, 2, '.', '');
+                    $payload['value'] = number_format($valueWithTaxCents / 100, 2, '.', ''); // Enviar valor COM taxas
                     $charge = $asaas->createCharge($payload);
                 }
             } else {
-                $payload['value'] = number_format($totalAmount / 100, 2, '.', '');
+                $payload['value'] = number_format($valueWithTaxCents / 100, 2, '.', ''); // Enviar valor COM taxas
                 $charge = $asaas->createCharge($payload);
             }
 
-            // Atualizar registrations com payment_id
+            // Atualizar o valor final com o retornado pelo Asaas (se disponível)
+            $finalAmountCents = $valueWithTaxCents;
+            if (isset($charge['totalValue'])) {
+                $finalAmountCents = (int) round((float) $charge['totalValue'] * 100);
+            } elseif (isset($charge['value'])) {
+                $finalAmountCents = (int) round((float) $charge['value'] * 100);
+            }
+
+            // Calcular valor proporcional por registration (total com taxas / número de registrations)
+            $registrationsCount = count($allRegistrations);
+            $pricePerRegistrationCents = $registrationsCount > 0 
+                ? (int) round($finalAmountCents / $registrationsCount) 
+                : 0;
+
+            // Atualizar registrations com payment_id e price_paid proporcional
             if (isset($charge['id'])) {
                 foreach ($allRegistrations as $registration) {
                     $registration->update([
                         'asaas_customer_id' => $customer['id'] ?? null,
                         'asaas_payment_id' => $charge['id'],
-                        'gateway_payload' => $charge,
+                        'gateway_payload' => array_merge($charge, [
+                            'appliedFixTax' => $fixCents / 100,
+                            'appliedPercentTax' => $percent,
+                        ]),
+                        'price_paid' => $pricePerRegistrationCents, // Valor proporcional com taxas
                     ]);
                 }
             }
@@ -465,7 +533,7 @@ class CheckoutController extends Controller
                 'registrations' => $allRegistrations,
                 'payment' => [
                     'method' => $data['payment']['method'],
-                    'amount' => $totalAmount / 100,
+                    'amount' => $finalAmountCents / 100, // Retornar valor final COM taxas em reais
                     'pix' => [
                         'qrCodeImage' => $charge['pixQrCodeImage'] ?? null,
                         'payload' => $charge['pixQrCode'] ?? null,
@@ -474,6 +542,10 @@ class CheckoutController extends Controller
                     'digitableLine' => $charge['identificationField'] ?? null,
                     'creditCard' => [
                         'status' => $charge['status'] ?? null,
+                    ],
+                    'tax' => [
+                        'fix' => $fixCents / 100,
+                        'percent' => $percent,
                     ],
                 ],
             ], 201);

@@ -598,7 +598,7 @@ function getInitialValues() {
     province: 'Centro',
     city: 'Campo Grande',
     state: 'MS',
-    card: { holderName: 'Heber', number: '4444 4444 4444 4444', expiryMonth: '11', expiryYear: '2025', ccv: '123' },
+    card: { holderName: 'Heber', number: '4444 4444 4444 4444', expiryMonth: '11', expiryYear: '2026', ccv: '123' },
     total: total.value
   }
 
