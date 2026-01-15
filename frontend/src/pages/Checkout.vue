@@ -946,16 +946,9 @@ async function onSubmit(vals) {
         return
       }
 
-      // Se for cartão de crédito e estiver confirmado, mostrar
-      if (data.payment.method === 'CREDIT_CARD' && data.payment.creditCard?.status === 'CONFIRMED') {
-        cart.clear()
-        const registrationsParam = encodeURIComponent(JSON.stringify(data.registrations))
-        router.push(`/registration-success?registrations=${registrationsParam}`)
-        return
-      }
-
-      // Para PIX e Boleto, redirecionar para página de pagamento
-      if (data.payment.method === 'PIX' || data.payment.method === 'BOLETO') {
+      // Para todos os métodos de pagamento (PIX, Boleto e Cartão), redirecionar para página de pagamento
+      // Isso garante que cartão de crédito também mostre a página event-payment com status "Pago"
+      if (data.payment.method === 'PIX' || data.payment.method === 'BOLETO' || data.payment.method === 'CREDIT_CARD') {
         // Passar dados do pagamento via query params
         const paymentParam = encodeURIComponent(JSON.stringify(data.payment))
         cart.clear()
@@ -1004,10 +997,18 @@ async function onSubmit(vals) {
           router.push({ name: 'payment', params: { orderNumber: data.orderNumber } })
           if (data.payment.creditCard.status === 'CONFIRMED') {
             // Se produtos foram pagos e eventos são gratuitos ou pagos e confirmados
-            if (hasFreeEvents || (eventData.data.payment.creditCard?.status === 'CONFIRMED')) {
+            if (hasFreeEvents) {
+              // Eventos gratuitos: mostrar registration-success
               setTimeout(() => {
                 const registrationsParam = encodeURIComponent(JSON.stringify(eventData.data.registrations))
                 router.push(`/registration-success?registrations=${registrationsParam}`)
+              }, 2000)
+              return
+            } else if (eventData.data.payment.creditCard?.status === 'CONFIRMED') {
+              // Eventos pagos confirmados: mostrar event-payment (igual PIX/Boleto)
+              setTimeout(() => {
+                const paymentParam = encodeURIComponent(JSON.stringify(eventData.data.payment))
+                router.push(`/event-payment?payment=${paymentParam}`)
               }, 2000)
               return
             }

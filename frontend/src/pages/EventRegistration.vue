@@ -836,7 +836,21 @@ async function onSubmit(values) {
 
     const { data } = await registrationsApi.create(payload)
 
-    // Redirecionar para página de sucesso com QR codes
+    // Se for evento gratuito, redirecionar para página de sucesso
+    if (event.value.price === 0 || !data.payment) {
+      const registrationsParam = encodeURIComponent(JSON.stringify(data.registrations))
+      window.location.href = `/registration-success?registrations=${registrationsParam}`
+      return
+    }
+
+    // Se for pagamento (PIX, Boleto ou Cartão), redirecionar para página de pagamento
+    if (data.payment) {
+      const paymentParam = encodeURIComponent(JSON.stringify(data.payment))
+      window.location.href = `/event-payment?payment=${paymentParam}`
+      return
+    }
+
+    // Fallback: página de sucesso
     const registrationsParam = encodeURIComponent(JSON.stringify(data.registrations))
     window.location.href = `/registration-success?registrations=${registrationsParam}`
   } catch (error) {
