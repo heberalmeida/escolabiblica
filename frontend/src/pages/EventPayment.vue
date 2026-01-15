@@ -168,7 +168,10 @@ const paymentStatus = computed(() => {
   // Priorizar payment_status do paymentInfo
   if (paymentInfo.value?.payment_status) {
     const status = paymentInfo.value.payment_status
-    if (status === 'paid') return 'paid'
+    if (status === 'paid') {
+      console.log('[EventPayment] paymentStatus computed: paid (via payment_status)')
+      return 'paid'
+    }
     if (status === 'pending') return 'pending'
     if (status === 'canceled') return 'canceled'
     if (status === 'overdue') return 'overdue'
@@ -176,7 +179,10 @@ const paymentStatus = computed(() => {
   
   // Verificar no gateway_payload do paymentInfo
   const gatewayStatus = paymentInfo.value?.gateway_payload?.status
-  if (gatewayStatus === 'CONFIRMED' || gatewayStatus === 'RECEIVED') return 'paid'
+  if (gatewayStatus === 'CONFIRMED' || gatewayStatus === 'RECEIVED') {
+    console.log('[EventPayment] paymentStatus computed: paid (via gateway_status)', gatewayStatus)
+    return 'paid'
+  }
   if (gatewayStatus === 'PENDING') return 'pending'
   if (gatewayStatus === 'CANCELLED' || gatewayStatus === 'DELETED') return 'canceled'
   if (gatewayStatus === 'OVERDUE') return 'overdue'
@@ -189,6 +195,8 @@ const paymentStatus = computed(() => {
   
   return 'pending'
 })
+
+const isPaidStatus = computed(() => paymentStatus.value === 'paid')
 
 const receiptUrl = computed(() => {
   return paymentInfo.value?.gateway_payload?.transactionReceiptUrl || 
@@ -337,15 +345,15 @@ async function fetchRegistrations() {
           registrations_count: data.registrations?.length || 0
         })
         
-        // Atualizar paymentInfo de forma reativa
-        paymentInfo.value = { ...data }
-        registrations.value = data.registrations || []
+        // Atualizar paymentInfo de forma reativa (usar Object.assign para garantir reatividade)
+        paymentInfo.value = Object.assign({}, data)
+        registrations.value = [...(data.registrations || [])]
         
-        console.log('[EventPayment] paymentInfo atualizado:', {
-          payment_status: paymentInfo.value.payment_status,
-          gateway_status: paymentInfo.value.gateway_payload?.status
-        })
-        console.log('[EventPayment] paymentStatus computed será:', paymentStatus.value)
+        console.log('[EventPayment] ===== DADOS ATUALIZADOS DO BACKEND =====')
+        console.log('[EventPayment] payment_status:', paymentInfo.value.payment_status)
+        console.log('[EventPayment] gateway_payload?.status:', paymentInfo.value.gateway_payload?.status)
+        console.log('[EventPayment] paymentStatus computed:', paymentStatus.value)
+        console.log('[EventPayment] isPaidStatus:', isPaidStatus.value)
         
         // Sempre reconfigurar listener para garantir que está ativo
         setupFirebaseListener(cleanPaymentId)
@@ -361,9 +369,14 @@ async function fetchRegistrations() {
             const { data } = await http.post('/registrations/by-pix-payload', {
               payload: paymentData.value.pix.payload
             })
-            // Atualizar paymentInfo de forma reativa
-            paymentInfo.value = { ...data }
-            registrations.value = data.registrations || []
+            // Atualizar paymentInfo de forma reativa (usar Object.assign para garantir reatividade)
+            paymentInfo.value = Object.assign({}, data)
+            registrations.value = [...(data.registrations || [])]
+            
+            console.log('[EventPayment] ===== DADOS ATUALIZADOS (via PIX payload) =====')
+            console.log('[EventPayment] payment_status:', paymentInfo.value.payment_status)
+            console.log('[EventPayment] gateway_status:', paymentInfo.value.gateway_payload?.status)
+            
             if (data.payment_id) {
               // Sempre reconfigurar listener
               setupFirebaseListener(data.payment_id)
@@ -433,30 +446,30 @@ async function fetchRegistrations() {
                 gateway_status: paymentDetails.gateway_payload?.status
               })
               
-              // Atualizar paymentInfo de forma reativa
-              paymentInfo.value = { ...paymentDetails }
-              registrations.value = paymentDetails.registrations || []
+              // Atualizar paymentInfo de forma reativa (usar Object.assign para garantir reatividade)
+              paymentInfo.value = Object.assign({}, paymentDetails)
+              registrations.value = [...(paymentDetails.registrations || [])]
               
-              console.log('[EventPayment] paymentInfo atualizado (via busca):', {
-                payment_status: paymentInfo.value.payment_status,
-                gateway_status: paymentInfo.value.gateway_payload?.status
-              })
+              console.log('[EventPayment] ===== DADOS ATUALIZADOS (via busca) =====')
+              console.log('[EventPayment] payment_status:', paymentInfo.value.payment_status)
+              console.log('[EventPayment] gateway_status:', paymentInfo.value.gateway_payload?.status)
+              console.log('[EventPayment] paymentStatus computed:', paymentStatus.value)
               
               // Sempre reconfigurar listener para garantir que está ativo
               setupFirebaseListener(foundPaymentId)
             } catch (err) {
               console.warn('Erro ao buscar detalhes do pagamento:', err)
               // Fallback: usar dados encontrados mesmo sem detalhes
-              paymentInfo.value = { ...found }
-              registrations.value = found.registrations || []
+              paymentInfo.value = Object.assign({}, found)
+              registrations.value = [...(found.registrations || [])]
               if (foundPaymentId) {
                 // Sempre reconfigurar listener
                 setupFirebaseListener(foundPaymentId)
               }
             }
           } else {
-            paymentInfo.value = { ...found }
-            registrations.value = found.registrations || []
+            paymentInfo.value = Object.assign({}, found)
+            registrations.value = [...(found.registrations || [])]
             if (foundPaymentId) {
               // Sempre reconfigurar listener
               setupFirebaseListener(foundPaymentId)
@@ -474,7 +487,7 @@ async function fetchRegistrations() {
     }
     
     if (!paymentInfo.value || !paymentInfo.value.payment_id) {
-      paymentInfo.value = {
+      paymentInfo.value = Object.assign({}, {
         id: paymentData.value?.id || null,
         payment_id: paymentData.value?.id || null,
         payment_method: paymentData.value?.method || 'PIX',
@@ -484,7 +497,7 @@ async function fetchRegistrations() {
         gateway_payload: paymentData.value,
         registrations: [],
         registrations_count: 0,
-      }
+      })
       
       // Sempre configurar listener do Firebase se tiver payment_id (para PIX, Boleto e Cartão)
       const paymentIdToUse = paymentData.value?.id || paymentInfo.value?.payment_id
@@ -517,7 +530,7 @@ async function fetchRegistrations() {
   } catch (err) {
     console.error('Erro ao buscar registrations:', err)
     if (!paymentInfo.value || !paymentInfo.value.payment_id) {
-      paymentInfo.value = {
+      paymentInfo.value = Object.assign({}, {
         id: paymentData.value?.id || null,
         payment_id: paymentData.value?.id || null,
         payment_method: paymentData.value?.method || 'PIX',
@@ -527,7 +540,7 @@ async function fetchRegistrations() {
         gateway_payload: paymentData.value,
         registrations: [],
         registrations_count: 0,
-      }
+      })
     }
   } finally {
     isFetching = false
@@ -552,30 +565,32 @@ function setupFirebaseListener(paymentId) {
     unsubscribe = null
   }
   
-  console.log('[EventPayment] Configurando listener Firebase para payment_id:', paymentId)
+  console.log('[EventPayment] ===== CONFIGURANDO LISTENER FIREBASE =====')
+  console.log('[EventPayment] Payment ID:', paymentId)
   const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
   const firebasePath = `updates/${prefix}registrations_by_payment_${paymentId}`
-  console.log('[EventPayment] Firebase path:', firebasePath)
+  console.log('[EventPayment] Firebase path completo:', firebasePath)
   const paymentRef = dbRef(db, firebasePath)
   let isFirstSnapshot = true
   
   unsubscribe = onValue(paymentRef, async (snapshot) => {
+    console.log('[EventPayment] ===== FIREBASE SNAPSHOT RECEBIDO =====')
+    console.log('[EventPayment] Existe?', snapshot.exists())
+    console.log('[EventPayment] isFirstSnapshot?', isFirstSnapshot)
+    
     if (!snapshot.exists()) {
       console.log('[EventPayment] Firebase: Snapshot não existe')
       return
     }
     
     const payload = snapshot.val()
-    console.log('[EventPayment] Firebase: Snapshot recebido', { 
-      payment_status: payload.payment_status, 
-      status: payload.status,
-      gateway_status: payload.gateway_payload?.status,
-      isFirstSnapshot
-    })
+    console.log('[EventPayment] Payload completo:', JSON.stringify(payload, null, 2))
+    console.log('[EventPayment] payment_status:', payload.payment_status)
+    console.log('[EventPayment] gateway_payload?.status:', payload.gateway_payload?.status)
     
     // Sempre ignorar o primeiro snapshot (igual ao RegistrationsByCpf)
     if (isFirstSnapshot) {
-      console.log('[EventPayment] Firebase: Ignorando primeiro snapshot')
+      console.log('[EventPayment] Firebase: Ignorando primeiro snapshot (valor inicial)')
       isFirstSnapshot = false
       return
     }
@@ -584,25 +599,70 @@ function setupFirebaseListener(paymentId) {
     
     // Evitar atualizações duplicadas usando token global
     if (token && token === lastUpdateToken) {
-      console.log('[EventPayment] Firebase: Token duplicado, ignorando')
+      console.log('[EventPayment] Firebase: Token duplicado, ignorando atualização')
       return
     }
     lastUpdateToken = token
     
-    console.log('[EventPayment] Firebase: Atualização detectada!', { 
-      payment_status: payload.payment_status, 
-      status: payload.status,
-      gateway_status: payload.gateway_payload?.status,
-      token 
-    })
+    console.log('[EventPayment] ===== FIREBASE: ATUALIZAÇÃO DETECTADA! =====')
+    console.log('[EventPayment] payment_status:', payload.payment_status)
+    console.log('[EventPayment] gateway_status:', payload.gateway_payload?.status)
+    console.log('[EventPayment] Token:', token)
     
     // Recarregar dados quando houver atualização (igual ao RegistrationsByCpf)
     if (!isFetching) {
-      console.log('[EventPayment] Firebase: Recarregando dados do backend...')
+      console.log('[EventPayment] Firebase: Iniciando recarregamento de dados...')
       isFetching = true
       try {
-        await fetchRegistrations()
-        console.log('[EventPayment] Firebase: Dados recarregados com sucesso')
+        // Primeiro, tentar atualizar diretamente do payload do Firebase se tiver dados suficientes
+        if (payload.payment_status || payload.gateway_payload?.status) {
+          console.log('[EventPayment] Firebase: Atualizando paymentInfo diretamente do payload')
+          
+          // Criar novo objeto para garantir reatividade
+          const updatedInfo = Object.assign({}, paymentInfo.value || {})
+          
+          if (payload.payment_status) {
+            updatedInfo.payment_status = payload.payment_status
+          }
+          
+          if (payload.gateway_payload) {
+            updatedInfo.gateway_payload = Object.assign({}, updatedInfo.gateway_payload || {}, payload.gateway_payload)
+          }
+          
+          // Atualizar paymentInfo com nova referência
+          paymentInfo.value = updatedInfo
+          
+          console.log('[EventPayment] Firebase: paymentInfo atualizado do payload', {
+            payment_status: paymentInfo.value.payment_status,
+            gateway_status: paymentInfo.value.gateway_payload?.status
+          })
+        }
+        
+        // Sempre buscar dados atualizados do backend para garantir consistência
+        const currentPaymentId = paymentInfo.value?.payment_id || paymentData.value?.id || paymentId
+        if (currentPaymentId) {
+          console.log('[EventPayment] Firebase: Buscando dados atualizados do backend para payment_id:', currentPaymentId)
+          try {
+            const { data } = await http.get(`/registrations/by-payment/${encodeURIComponent(currentPaymentId)}`)
+            
+            // Atualizar paymentInfo de forma reativa (forçar nova referência)
+            paymentInfo.value = Object.assign({}, data)
+            registrations.value = [...(data.registrations || [])]
+            
+            console.log('[EventPayment] Firebase: Dados atualizados do backend!', {
+              payment_status: paymentInfo.value.payment_status,
+              gateway_status: paymentInfo.value.gateway_payload?.status,
+              paymentStatus_computed: paymentStatus.value
+            })
+          } catch (backendErr) {
+            console.warn('[EventPayment] Firebase: Erro ao buscar do backend, usando dados do payload', backendErr)
+          }
+        } else {
+          // Fallback: usar fetchRegistrations completo
+          await fetchRegistrations()
+        }
+        
+        console.log('[EventPayment] Firebase: Dados recarregados! paymentStatus agora é:', paymentStatus.value)
       } catch (err) {
         console.error('[EventPayment] Firebase: Erro ao recarregar dados', err)
       } finally {
@@ -612,10 +672,12 @@ function setupFirebaseListener(paymentId) {
       console.log('[EventPayment] Firebase: Já está buscando, ignorando atualização')
     }
   }, (error) => {
-    console.error('[EventPayment] Firebase: Erro no listener', error)
+    console.error('[EventPayment] ===== ERRO NO LISTENER FIREBASE =====', error)
   })
   
-  console.log('[EventPayment] Listener Firebase configurado com sucesso para:', paymentId)
+  console.log('[EventPayment] ===== LISTENER FIREBASE CONFIGURADO COM SUCESSO =====')
+  console.log('[EventPayment] Payment ID:', paymentId)
+  console.log('[EventPayment] Path:', firebasePath)
   
   // Também escutar por telefone como fallback (se tivermos registrations)
   const phoneToUse = registrations.value.length > 0 && registrations.value[0].phone
@@ -654,12 +716,42 @@ function setupFirebaseListener(paymentId) {
         token 
       })
       
-      // Recarregar dados quando houver atualização
+      // Recarregar dados quando houver atualização (mesma lógica do listener principal)
       if (!isFetching) {
-        console.log('[EventPayment] Firebase (phone): Recarregando dados...')
+        console.log('[EventPayment] Firebase (phone): Iniciando recarregamento de dados...')
         isFetching = true
         try {
-          await fetchRegistrations()
+          // Primeiro, tentar atualizar diretamente do payload do Firebase
+          if (payload.payment_status || payload.gateway_payload?.status) {
+            console.log('[EventPayment] Firebase (phone): Atualizando paymentInfo diretamente do payload')
+            
+            const updatedInfo = Object.assign({}, paymentInfo.value || {})
+            
+            if (payload.payment_status) {
+              updatedInfo.payment_status = payload.payment_status
+            }
+            
+            if (payload.gateway_payload) {
+              updatedInfo.gateway_payload = Object.assign({}, updatedInfo.gateway_payload || {}, payload.gateway_payload)
+            }
+            
+            paymentInfo.value = updatedInfo
+          }
+          
+          // Sempre buscar dados atualizados do backend
+          const currentPaymentId = paymentInfo.value?.payment_id || paymentData.value?.id
+          if (currentPaymentId) {
+            try {
+              const { data } = await http.get(`/registrations/by-payment/${encodeURIComponent(currentPaymentId)}`)
+              paymentInfo.value = Object.assign({}, data)
+              registrations.value = [...(data.registrations || [])]
+            } catch (backendErr) {
+              console.warn('[EventPayment] Firebase (phone): Erro ao buscar do backend', backendErr)
+              await fetchRegistrations()
+            }
+          } else {
+            await fetchRegistrations()
+          }
         } finally {
           isFetching = false
         }
