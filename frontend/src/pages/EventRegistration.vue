@@ -318,7 +318,7 @@
           </div>
           <div v-if="values.payment_method && grandTotal(values) !== totalAmount" class="text-sm text-gray-600 mt-2">
             <span>Subtotal: {{ formatBRL(totalAmount) }}</span>
-            <span v-if="values.payment_method === 'PIX' && chargePix" class="ml-2">+ Taxa: {{ formatBRL(199) }}</span>
+            <!-- PIX não tem taxa - não mostrar -->
             <span v-if="values.payment_method === 'BOLETO' && chargeBoleto" class="ml-2">+ Taxa: {{ formatBRL(199) }}</span>
             <span v-if="values.payment_method === 'CREDIT_CARD' && cardTax(values)" class="ml-2">+ Taxa: {{ cardTax(values) }}</span>
           </div>
@@ -545,7 +545,8 @@ const installmentOptions = computed(() => {
 
 function grandTotal(vals) {
   if (!vals?.payment_method) return totalAmount.value
-  if (vals.payment_method === 'PIX' && chargePix) return totalAmount.value + 199
+  // PIX não tem taxa - sempre retornar valor sem taxa
+  if (vals.payment_method === 'PIX') return totalAmount.value
   if (vals.payment_method === 'BOLETO' && chargeBoleto) return totalAmount.value + 199
   if (vals.payment_method === 'CREDIT_CARD' && chargeCard) {
     const n = Number(vals.installments || 1)

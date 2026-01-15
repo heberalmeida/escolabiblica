@@ -63,7 +63,10 @@
               <div>
                 <strong>Valor Total:</strong>
                 <span class="font-bold text-gray-900 text-lg">
-                  {{ formatBRL(order.total_amount || 0) }}
+                  {{ displayTotal(order) }}
+                </span>
+                <span v-if="isCardInstallments(order)" class="text-xs text-gray-500 ml-2">
+                  ({{ installmentCount(order) }}x de {{ formatBRL(perInstallmentCents(order)) }})
                 </span>
               </div>
               <div v-if="order.payment_method">
@@ -709,6 +712,63 @@ function formatPaymentMethod(method) {
     'MANUAL': 'Pagamento Manual',
   }
   return methods[method] || method
+}
+
+function isCardInstallments(order) {
+  if (!order) return false
+  const t = (order.gateway_payload?.billingType || order.payment_method || '').toUpperCase()
+  if (t !== 'CREDIT_CARD') return false
+  const cnt = Number(order.gateway_payload?.installmentCount || 0)
+  if (cnt > 1) return true
+  const desc = order.gateway_payload?.description || ''
+  return /Parcela\s+\d+\s+de\s+\d+/i.test(desc)
+}
+
+function installmentCount(order) {
+  const cnt = Number(order?.gateway_payload?.installmentCount || 0)
+  if (cnt > 1) return cnt
+  const desc = order?.gateway_payload?.description || ''
+  const m = desc.match(/de\s+(\d+)/i)
+  return m ? Number(m[1]) : 1
+}
+
+function perInstallmentCents(order) {
+  const gp = order?.gateway_payload || {}
+  if (gp.installmentValue != null) return Math.round(Number(gp.installmentValue) * 100)
+  if (gp.value != null && installmentCount(order) > 1) return Math.round(Number(gp.value) * 100)
+  return Math.round(Number(gp.value ?? order?.total_amount ?? 0))
+}
+
+function displayTotal(order) {
+  if (!order) return formatBRL(0)
+  
+  const gp = order?.gateway_payload || {}
+  
+  // Se houver parcelamento, usar totalValue ou calcular
+  if (isCardInstallments(order)) {
+    if (gp.totalValue != null) {
+      return formatBRL(Math.round(Number(gp.totalValue) * 100))
+    }
+    // Calcular: parcela * número de parcelas
+    const count = installmentCount(order)
+    const per = perInstallmentCents(order)
+    if (per && count > 1) {
+      return formatBRL(per * count)
+    }
+  }
+  
+  // Se tiver totalValue, usar ele
+  if (gp.totalValue != null) {
+    return formatBRL(Math.round(Number(gp.totalValue) * 100))
+  }
+  
+  // Se tiver value, usar ele
+  if (gp.value != null) {
+    return formatBRL(Math.round(Number(gp.value) * 100))
+  }
+  
+  // Fallback: usar total_amount
+  return formatBRL(order.total_amount || 0)
 }
 
 onBeforeUnmount(() => {

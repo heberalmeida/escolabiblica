@@ -16,8 +16,17 @@ class AsaasWebhookController extends Controller
 
         $paymentId = $event['payment']['id'] ?? null;
         $status    = $event['event'] ?? null;
+        $paymentData = $event['payment'] ?? [];
+        $paymentStatus = $paymentData['status'] ?? null;
+
+        Log::info('Webhook Asaas recebido', [
+            'payment_id' => $paymentId,
+            'event' => $status,
+            'payment_status' => $paymentStatus,
+        ]);
 
         if (!$paymentId) {
+            Log::warning('Webhook sem payment_id', ['event' => $event]);
             return response()->json(['success' => true]);
         }
 
@@ -28,6 +37,9 @@ class AsaasWebhookController extends Controller
 
         // Se não encontrou nem order nem registrations, retornar
         if (!$order && $registrations->isEmpty()) {
+            Log::warning('Webhook sem order ou registrations encontrados', [
+                'payment_id' => $paymentId,
+            ]);
             return response()->json(['success' => true]);
         }
 
@@ -154,8 +166,10 @@ class AsaasWebhookController extends Controller
             }
 
             // Atualizar todas as registrations com o novo status
+            $wasPaid = false;
             foreach ($registrations as $registration) {
                 $oldPayload = $registration->gateway_payload ?? [];
+                $oldStatus = $registration->payment_status;
                 
                 $registration->gateway_payload = array_merge(
                     $oldPayload,
@@ -167,13 +181,28 @@ class AsaasWebhookController extends Controller
                 // Se o evento é PAYMENT_RECEIVED ou PAYMENT_CONFIRMED, sempre marcar como paid
                 if ($status === 'PAYMENT_RECEIVED' || $status === 'PAYMENT_CONFIRMED') {
                     $registration->payment_status = 'paid';
+                    $wasPaid = true;
                 } elseif ($paymentStatusFromPayload === 'CONFIRMED' || $paymentStatusFromPayload === 'RECEIVED') {
                     $registration->payment_status = 'paid';
+                    $wasPaid = true;
                 } elseif ($paymentStatus !== 'pending') {
                     $registration->payment_status = $paymentStatus;
+                    if ($paymentStatus === 'paid') {
+                        $wasPaid = true;
+                    }
                 }
                 
                 $registration->save();
+                
+                // Log quando o status muda para paid
+                if ($registration->payment_status === 'paid' && $oldStatus !== 'paid') {
+                    Log::info('Registration marcada como paga', [
+                        'registration_id' => $registration->id,
+                        'payment_id' => $paymentId,
+                        'event' => $status,
+                        'payment_status_from_payload' => $paymentStatusFromPayload,
+                    ]);
+                }
             }
         }
 
@@ -269,24 +298,30 @@ class AsaasWebhookController extends Controller
                 // Atualizar por payment_id uma vez para todas as registrations
                 if ($paymentId) {
                     $firstRegistration = $registrations->first();
+                    $currentStatus = $firstRegistration->payment_status ?? 'pending';
+                    
                     $paymentUpdated = $firebase->update("updates/{$prefix}registrations_by_payment_{$paymentId}", [
                         'last_updated' => now()->toIso8601String(),
-                        'payment_status' => $firstRegistration->payment_status ?? 'pending',
+                        'payment_status' => $currentStatus,
                         'registration_ids' => $registrations->pluck('id')->toArray(),
                         'payment_id' => $paymentId,
+                        'event' => $status,
+                        'updated_at' => now()->toIso8601String(),
                     ]);
                     
                     if (!$paymentUpdated) {
                         Log::warning('Falha ao atualizar Firebase por payment_id', [
                             'payment_id' => $paymentId,
+                            'status' => $currentStatus,
+                        ]);
+                    } else {
+                        Log::info('Firebase atualizado para registrations', [
+                            'payment_id' => $paymentId,
+                            'registrations_count' => $registrations->count(),
+                            'payment_status' => $currentStatus,
+                            'event' => $status,
                         ]);
                     }
-                    
-                    Log::info('Firebase atualizado para registrations', [
-                        'payment_id' => $paymentId,
-                        'registrations_count' => $registrations->count(),
-                        'payment_status' => $firstRegistration->payment_status ?? 'unknown',
-                    ]);
                 }
             } catch (\Throwable $e) {
                 Log::error('Erro ao atualizar Firebase para Registrations', [

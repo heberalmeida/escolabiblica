@@ -82,17 +82,18 @@ class RegistrationController extends Controller
         $formattedOrders = array_map(function ($order) {
             // Extrair informações do comprador do gateway_payload ou da primeira registration
             $buyerInfo = null;
+            $gatewayPayload = null;
             if ($order['gateway_payload']) {
-                $payload = is_array($order['gateway_payload']) 
+                $gatewayPayload = is_array($order['gateway_payload']) 
                     ? $order['gateway_payload'] 
                     : json_decode($order['gateway_payload'], true);
                 
-                if (isset($payload['customer'])) {
+                if (isset($gatewayPayload['customer'])) {
                     $buyerInfo = [
-                        'name' => $payload['customer']['name'] ?? null,
-                        'cpf' => $payload['customer']['cpfCnpj'] ?? $payload['customer']['cpf'] ?? null,
-                        'email' => $payload['customer']['email'] ?? null,
-                        'phone' => $payload['customer']['phone'] ?? null,
+                        'name' => $gatewayPayload['customer']['name'] ?? null,
+                        'cpf' => $gatewayPayload['customer']['cpfCnpj'] ?? $gatewayPayload['customer']['cpf'] ?? null,
+                        'email' => $gatewayPayload['customer']['email'] ?? null,
+                        'phone' => $gatewayPayload['customer']['phone'] ?? null,
                     ];
                 }
             }
@@ -107,13 +108,30 @@ class RegistrationController extends Controller
                 ];
             }
 
+            // Calcular total_amount: se houver parcelamento, usar totalValue do gateway_payload
+            $totalAmountCents = $order['total_amount']; // em centavos
+            if ($gatewayPayload) {
+                // Se houver parcelamento (installmentCount > 1), usar totalValue
+                $installmentCount = (int) ($gatewayPayload['installmentCount'] ?? 0);
+                if ($installmentCount > 1 && isset($gatewayPayload['totalValue'])) {
+                    // totalValue vem em reais, converter para centavos
+                    $totalAmountCents = (int) round((float) $gatewayPayload['totalValue'] * 100);
+                } elseif (isset($gatewayPayload['totalValue'])) {
+                    // Mesmo sem parcelamento, se tiver totalValue, usar ele
+                    $totalAmountCents = (int) round((float) $gatewayPayload['totalValue'] * 100);
+                } elseif (isset($gatewayPayload['value'])) {
+                    // Se não tiver totalValue mas tiver value, usar ele
+                    $totalAmountCents = (int) round((float) $gatewayPayload['value'] * 100);
+                }
+            }
+
             return [
                 'id' => $order['payment_id'] ?? 'free_' . $order['created_at']->format('YmdHis'),
                 'payment_id' => $order['payment_id'],
                 'payment_method' => $order['payment_method'],
                 'payment_status' => $order['payment_status'],
-                'total_amount' => $order['total_amount'], // em centavos
-                'total_amount_formatted' => number_format($order['total_amount'] / 100, 2, ',', '.'), // formato brasileiro
+                'total_amount' => $totalAmountCents, // em centavos (com parcelamento considerado)
+                'total_amount_formatted' => number_format($totalAmountCents / 100, 2, ',', '.'), // formato brasileiro
                 'buyer' => $buyerInfo,
                 'created_at' => $order['created_at']->toIso8601String(),
                 'updated_at' => $order['updated_at']->toIso8601String(),

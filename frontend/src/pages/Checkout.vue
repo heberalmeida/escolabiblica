@@ -754,7 +754,8 @@ const installmentOptions = computed(() => {
 function grandTotal(vals) {
   const fix = 49
   if (!vals?.method) return total.value
-  if (vals.method === 'PIX' && chargePix) return total.value + 199
+  // PIX não tem taxa - sempre retornar valor sem taxa
+  if (vals.method === 'PIX') return total.value
   if (vals.method === 'BOLETO' && chargeBoleto) return total.value + 199
   if (vals.method === 'CREDIT_CARD' && chargeCard) {
     const n = Number(vals.installments || 1)
@@ -780,7 +781,8 @@ function cardTax(vals) {
 
 function buildPayload(vals) {
   let tax = { fix: 0, percent: 0 }
-  if (vals.method === 'PIX' && chargePix) tax = { fix: 199, percent: 0 }
+  // PIX não tem taxa - sempre enviar tax = { fix: 0, percent: 0 }
+  if (vals.method === 'PIX') tax = { fix: 0, percent: 0 }
   if (vals.method === 'BOLETO' && chargeBoleto) tax = { fix: 199, percent: 0 }
   if (vals.method === 'CREDIT_CARD' && chargeCard) {
     const n = Number(vals.installments || 1)

@@ -61,8 +61,16 @@ class CheckoutController extends Controller
             }
 
             // Calcular taxas ANTES de criar o Order
-            $fixCents  = (int) ($data['payment']['tax']['fix'] ?? 0);
-            $percent   = (float) ($data['payment']['tax']['percent'] ?? 0);
+            // PIX não tem taxa - sempre usar valor sem taxa para PIX
+            $fixCents  = 0;
+            $percent   = 0.0;
+            
+            // Se não for PIX, aplicar taxas do payload
+            if ($data['payment']['method'] !== 'PIX') {
+                $fixCents  = (int) ($data['payment']['tax']['fix'] ?? 0);
+                $percent   = (float) ($data['payment']['tax']['percent'] ?? 0);
+            }
+            
             $percentCents = (int) round($totalCents * ($percent / 100));
             $valueWithTaxCents = $totalCents + $fixCents + $percentCents;
 
@@ -388,8 +396,9 @@ class CheckoutController extends Controller
                 $percent = (float) ($data['payment']['tax']['percent'] ?? 0);
             } else {
                 // Calcular taxas baseado no método de pagamento (mesma lógica do frontend)
+                // PIX não tem taxa - sempre usar valor sem taxa
                 if ($data['payment']['method'] === 'PIX') {
-                    $fixCents = 199; // R$ 1,99
+                    $fixCents = 0; // PIX não tem taxa
                     $percent = 0;
                 } elseif ($data['payment']['method'] === 'BOLETO') {
                     $fixCents = 199; // R$ 1,99
