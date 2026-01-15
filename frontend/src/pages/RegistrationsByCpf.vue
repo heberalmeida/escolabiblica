@@ -92,6 +92,13 @@
                   <font-awesome-icon :icon="['fas', 'print']" />
                   Imprimir Inscrições ({{ order.registrations_count || order.registrations?.length || 0 }})
                 </button>
+                
+                <!-- Botão de Comprovante -->
+                <a v-if="getReceiptUrl(order)" :href="getReceiptUrl(order)" target="_blank"
+                  class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm transition flex items-center justify-center gap-2">
+                  <font-awesome-icon :icon="['fas', 'receipt']" />
+                  Ver Comprovante
+                </a>
               </div>
               <div v-else class="bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-sm text-yellow-700">
                 <div class="flex items-center gap-2">
@@ -769,6 +776,13 @@ function displayTotal(order) {
   
   // Fallback: usar total_amount
   return formatBRL(order.total_amount || 0)
+}
+
+function getReceiptUrl(order) {
+  if (!order) return null
+  return order.gateway_payload?.transactionReceiptUrl || 
+         order.gateway_payload?.receiptUrl ||
+         null
 }
 
 onBeforeUnmount(() => {
