@@ -125,19 +125,131 @@ class RegistrationController extends Controller
                 }
             }
 
+            // Formatar datas de forma segura
+            $createdAtString = now()->toIso8601String();
+            if ($order['created_at']) {
+                if ($order['created_at'] instanceof \Carbon\Carbon) {
+                    $createdAtString = $order['created_at']->toIso8601String();
+                } elseif (is_string($order['created_at'])) {
+                    try {
+                        $createdAtString = \Carbon\Carbon::parse($order['created_at'])->toIso8601String();
+                    } catch (\Exception $e) {
+                        // Manter o valor padrão
+                    }
+                }
+            }
+            
+            $updatedAtString = now()->toIso8601String();
+            if ($order['updated_at']) {
+                if ($order['updated_at'] instanceof \Carbon\Carbon) {
+                    $updatedAtString = $order['updated_at']->toIso8601String();
+                } elseif (is_string($order['updated_at'])) {
+                    try {
+                        $updatedAtString = \Carbon\Carbon::parse($order['updated_at'])->toIso8601String();
+                    } catch (\Exception $e) {
+                        // Manter o valor padrão
+                    }
+                }
+            }
+            
+            $orderId = $order['payment_id'] ?? 'free_' . ($order['created_at'] instanceof \Carbon\Carbon ? $order['created_at']->format('YmdHis') : date('YmdHis'));
+            
             return [
-                'id' => $order['payment_id'] ?? 'free_' . $order['created_at']->format('YmdHis'),
+                'id' => $orderId,
                 'payment_id' => $order['payment_id'],
                 'payment_method' => $order['payment_method'],
                 'payment_status' => $order['payment_status'],
                 'total_amount' => $totalAmountCents, // em centavos (com parcelamento considerado)
                 'total_amount_formatted' => number_format($totalAmountCents / 100, 2, ',', '.'), // formato brasileiro
                 'buyer' => $buyerInfo,
-                'created_at' => $order['created_at']->toIso8601String(),
-                'updated_at' => $order['updated_at']->toIso8601String(),
+                'created_at' => $createdAtString,
+                'updated_at' => $updatedAtString,
                 'gateway_payload' => $order['gateway_payload'],
                 'registrations_count' => count($order['registrations']),
                 'registrations' => collect($order['registrations'])->map(function ($reg) {
+                    // Formatar birth_date
+                    $birthDate = null;
+                    if ($reg->birth_date) {
+                        if ($reg->birth_date instanceof \Carbon\Carbon) {
+                            $birthDate = $reg->birth_date->format('Y-m-d');
+                        } elseif (is_string($reg->birth_date)) {
+                            try {
+                                $birthDate = \Carbon\Carbon::parse($reg->birth_date)->format('Y-m-d');
+                            } catch (\Exception $e) {
+                                $birthDate = $reg->birth_date;
+                            }
+                        }
+                    }
+                    
+                    // Formatar validated_at
+                    $validatedAt = null;
+                    if ($reg->validated_at) {
+                        if ($reg->validated_at instanceof \Carbon\Carbon) {
+                            $validatedAt = $reg->validated_at->toIso8601String();
+                        } elseif (is_string($reg->validated_at)) {
+                            try {
+                                $validatedAt = \Carbon\Carbon::parse($reg->validated_at)->toIso8601String();
+                            } catch (\Exception $e) {
+                                $validatedAt = $reg->validated_at;
+                            }
+                        }
+                    }
+                    
+                    // Formatar created_at e updated_at
+                    $createdAt = now()->toIso8601String();
+                    if ($reg->created_at) {
+                        if ($reg->created_at instanceof \Carbon\Carbon) {
+                            $createdAt = $reg->created_at->toIso8601String();
+                        } elseif (is_string($reg->created_at)) {
+                            try {
+                                $createdAt = \Carbon\Carbon::parse($reg->created_at)->toIso8601String();
+                            } catch (\Exception $e) {
+                                $createdAt = (string) $reg->created_at;
+                            }
+                        }
+                    }
+                    
+                    $updatedAt = now()->toIso8601String();
+                    if ($reg->updated_at) {
+                        if ($reg->updated_at instanceof \Carbon\Carbon) {
+                            $updatedAt = $reg->updated_at->toIso8601String();
+                        } elseif (is_string($reg->updated_at)) {
+                            try {
+                                $updatedAt = \Carbon\Carbon::parse($reg->updated_at)->toIso8601String();
+                            } catch (\Exception $e) {
+                                $updatedAt = (string) $reg->updated_at;
+                            }
+                        }
+                    }
+                    
+                    // Formatar event dates
+                    $eventStartDate = null;
+                    $eventEndDate = null;
+                    if ($reg->event) {
+                        if ($reg->event->start_date) {
+                            if ($reg->event->start_date instanceof \Carbon\Carbon) {
+                                $eventStartDate = $reg->event->start_date->format('Y-m-d');
+                            } elseif (is_string($reg->event->start_date)) {
+                                try {
+                                    $eventStartDate = \Carbon\Carbon::parse($reg->event->start_date)->format('Y-m-d');
+                                } catch (\Exception $e) {
+                                    $eventStartDate = $reg->event->start_date;
+                                }
+                            }
+                        }
+                        if ($reg->event->end_date) {
+                            if ($reg->event->end_date instanceof \Carbon\Carbon) {
+                                $eventEndDate = $reg->event->end_date->format('Y-m-d');
+                            } elseif (is_string($reg->event->end_date)) {
+                                try {
+                                    $eventEndDate = \Carbon\Carbon::parse($reg->event->end_date)->format('Y-m-d');
+                                } catch (\Exception $e) {
+                                    $eventEndDate = $reg->event->end_date;
+                                }
+                            }
+                        }
+                    }
+                    
                     return [
                         'id' => $reg->id,
                         'registration_number' => $reg->registration_number,
@@ -145,7 +257,7 @@ class RegistrationController extends Controller
                         'name' => $reg->name,
                         'phone' => $reg->phone,
                         'cpf' => $reg->cpf,
-                        'birth_date' => $reg->birth_date?->format('Y-m-d'),
+                        'birth_date' => $birthDate,
                         'sector' => $reg->sector,
                         'congregation' => $reg->congregation,
                         'church_type' => $reg->church_type,
@@ -154,19 +266,19 @@ class RegistrationController extends Controller
                         'price_paid_formatted' => number_format($reg->price_paid / 100, 2, ',', '.'), // formato brasileiro
                         'payment_status' => $reg->payment_status,
                         'validated' => $reg->validated,
-                        'validated_at' => $reg->validated_at?->toIso8601String(),
+                        'validated_at' => $validatedAt,
                         'validated_by' => $reg->validated_by,
                         'event' => $reg->event ? [
                             'id' => $reg->event->id,
                             'name' => $reg->event->name,
                             'description' => $reg->event->description,
-                            'start_date' => $reg->event->start_date?->format('Y-m-d'),
-                            'end_date' => $reg->event->end_date?->format('Y-m-d'),
+                            'start_date' => $eventStartDate,
+                            'end_date' => $eventEndDate,
                             'price' => $reg->event->price,
                             'image' => $reg->event->image,
                         ] : null,
-                        'created_at' => $reg->created_at->toIso8601String(),
-                        'updated_at' => $reg->updated_at->toIso8601String(),
+                        'created_at' => $createdAt,
+                        'updated_at' => $updatedAt,
                     ];
                 })->values(),
             ];
@@ -615,14 +727,70 @@ class RegistrationController extends Controller
 
     public function getByPaymentId(string $paymentId)
     {
+        // Limpar o payment_id - aceitar UUID ou formato Asaas (pay_xxxxx)
+        $cleanPaymentId = $paymentId;
+        
+        // Tentar extrair UUID se for formato UUID
+        if (preg_match('/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i', $paymentId, $matches)) {
+            $cleanPaymentId = $matches[1];
+        } else {
+            // Se não for UUID, aceitar formato Asaas (pay_xxxxx) ou qualquer string válida
+            $cleanPaymentId = trim($paymentId);
+        }
+        
+        // Primeiro tentar busca exata
         $registrations = Registration::with('event')
-            ->where('asaas_payment_id', $paymentId)
+            ->where('asaas_payment_id', $cleanPaymentId)
             ->orderBy('created_at')
             ->get();
 
+        // Se não encontrou, tentar busca com LIKE (caso o payment_id esteja salvo com caracteres extras)
+        if ($registrations->isEmpty() && strlen($cleanPaymentId) >= 8) {
+            $registrations = Registration::with('event')
+                ->where('asaas_payment_id', 'LIKE', $cleanPaymentId . '%')
+                ->orderBy('created_at')
+                ->get();
+        }
+
+        // Se ainda não encontrou, tentar buscar pelo início do UUID (caso tenha sido truncado)
+        if ($registrations->isEmpty() && strlen($cleanPaymentId) >= 8) {
+            $uuidStart = substr($cleanPaymentId, 0, 8);
+            $registrations = Registration::with('event')
+                ->where('asaas_payment_id', 'LIKE', $uuidStart . '%')
+                ->orderBy('created_at', 'desc') // Mais recente primeiro
+                ->limit(10)
+                ->get();
+            
+            // Filtrar para encontrar o mais provável (que contenha mais caracteres do UUID)
+            if ($registrations->count() > 1) {
+                $bestMatch = $registrations->first();
+                $maxMatch = 0;
+                foreach ($registrations as $reg) {
+                    $matchLength = 0;
+                    for ($i = 0; $i < min(strlen($cleanPaymentId), strlen($reg->asaas_payment_id)); $i++) {
+                        if ($cleanPaymentId[$i] === $reg->asaas_payment_id[$i]) {
+                            $matchLength++;
+                        } else {
+                            break;
+                        }
+                    }
+                    if ($matchLength > $maxMatch) {
+                        $maxMatch = $matchLength;
+                        $bestMatch = $reg;
+                    }
+                }
+                $registrations = collect([$bestMatch]);
+            }
+        }
+
         if ($registrations->isEmpty()) {
+            \Log::warning('Nenhuma inscrição encontrada para payment_id', [
+                'payment_id_original' => $paymentId,
+                'payment_id_cleaned' => $cleanPaymentId,
+            ]);
             return response()->json([
-                'message' => 'Nenhuma inscrição encontrada para este pagamento.'
+                'message' => 'Nenhuma inscrição encontrada para este pagamento.',
+                'payment_id' => $paymentId,
             ], 404);
         }
 
@@ -630,17 +798,179 @@ class RegistrationController extends Controller
         $firstReg = $registrations->first();
         $totalAmount = $registrations->sum('price_paid');
         
+        // Usar o payment_id real do banco (pode ser diferente do que foi buscado)
+        $realPaymentId = $firstReg->asaas_payment_id ?? $cleanPaymentId;
+        
+        // Formatar registrations
+        $formattedRegistrations = $registrations->map(function ($reg) {
+            return [
+                'id' => $reg->id,
+                'registration_number' => $reg->registration_number,
+                'qr_code' => $reg->qr_code,
+                'name' => $reg->name,
+                'phone' => $reg->phone,
+                'cpf' => $reg->cpf,
+                'birth_date' => $reg->birth_date ? ($reg->birth_date instanceof \Carbon\Carbon ? $reg->birth_date->format('Y-m-d') : $reg->birth_date) : null,
+                'sector' => $reg->sector,
+                'congregation' => $reg->congregation,
+                'church_type' => $reg->church_type,
+                'gender' => $reg->gender,
+                'price_paid' => $reg->price_paid,
+                'price_paid_formatted' => number_format($reg->price_paid / 100, 2, ',', '.'),
+                'payment_status' => $reg->payment_status,
+                'validated' => $reg->validated,
+                'validated_at' => $reg->validated_at ? ($reg->validated_at instanceof \Carbon\Carbon ? $reg->validated_at->toIso8601String() : $reg->validated_at) : null,
+                'validated_by' => $reg->validated_by,
+                'asaas_payment_id' => $reg->asaas_payment_id,
+                'event' => $reg->event ? [
+                    'id' => $reg->event->id,
+                    'name' => $reg->event->name,
+                    'description' => $reg->event->description,
+                    'start_date' => $reg->event->start_date ? ($reg->event->start_date instanceof \Carbon\Carbon ? $reg->event->start_date->format('Y-m-d') : $reg->event->start_date) : null,
+                    'end_date' => $reg->event->end_date ? ($reg->event->end_date instanceof \Carbon\Carbon ? $reg->event->end_date->format('Y-m-d') : $reg->event->end_date) : null,
+                    'price' => $reg->event->price,
+                    'image' => $reg->event->image,
+                ] : null,
+                'created_at' => $reg->created_at instanceof \Carbon\Carbon ? $reg->created_at->toIso8601String() : $reg->created_at,
+                'updated_at' => $reg->updated_at instanceof \Carbon\Carbon ? $reg->updated_at->toIso8601String() : $reg->updated_at,
+            ];
+        })->values();
+        
+        // Calcular updated_at máximo de forma segura
+        $maxUpdatedAt = $registrations->max('updated_at');
+        $updatedAtString = now()->toIso8601String();
+        if ($maxUpdatedAt) {
+            if ($maxUpdatedAt instanceof \Carbon\Carbon) {
+                $updatedAtString = $maxUpdatedAt->toIso8601String();
+            } elseif (is_string($maxUpdatedAt)) {
+                try {
+                    $updatedAtString = \Carbon\Carbon::parse($maxUpdatedAt)->toIso8601String();
+                } catch (\Exception $e) {
+                    // Manter o valor padrão
+                }
+            }
+        }
+        
+        // Formatar created_at de forma segura
+        $createdAtString = now()->toIso8601String();
+        if ($firstReg->created_at) {
+            if ($firstReg->created_at instanceof \Carbon\Carbon) {
+                $createdAtString = $firstReg->created_at->toIso8601String();
+            } elseif (is_string($firstReg->created_at)) {
+                try {
+                    $createdAtString = \Carbon\Carbon::parse($firstReg->created_at)->toIso8601String();
+                } catch (\Exception $e) {
+                    // Manter o valor padrão
+                }
+            }
+        }
+        
         $paymentInfo = [
-            'payment_id' => $paymentId,
+            'id' => $realPaymentId, // Incluir 'id' para compatibilidade com frontend
+            'payment_id' => $realPaymentId,
             'payment_method' => $firstReg->payment_method,
             'payment_status' => $firstReg->payment_status,
             'total_amount' => $totalAmount,
             'total_amount_formatted' => number_format($totalAmount / 100, 2, ',', '.'),
             'gateway_payload' => $firstReg->gateway_payload,
-            'created_at' => $firstReg->created_at->toIso8601String(),
-            'updated_at' => $registrations->max('updated_at')->toIso8601String(),
+            'created_at' => $createdAtString,
+            'updated_at' => $updatedAtString,
             'registrations_count' => $registrations->count(),
-            'registrations' => $registrations,
+            'registrations' => $formattedRegistrations,
+        ];
+
+        return response()->json($paymentInfo, 200);
+    }
+
+    public function getByPixPayload(Request $request)
+    {
+        $request->validate([
+            'payload' => 'required|string',
+        ]);
+
+        $pixPayload = $request->input('payload');
+        
+        // Buscar registrations que tenham este payload no gateway_payload
+        // Usar múltiplas estratégias para garantir compatibilidade
+        $registrations = Registration::with('event')
+            ->where(function ($query) use ($pixPayload) {
+                // Tentar busca exata primeiro
+                $query->whereJsonContains('gateway_payload->pixQrCode', $pixPayload)
+                      ->orWhereJsonContains('gateway_payload->pix->payload', $pixPayload);
+                
+                // Se o banco suportar JSON_EXTRACT, usar também
+                if (config('database.default') === 'mysql') {
+                    $query->orWhereRaw('JSON_EXTRACT(gateway_payload, "$.pixQrCode") = ?', [$pixPayload])
+                          ->orWhereRaw('JSON_EXTRACT(gateway_payload, "$.pix.payload") = ?', [$pixPayload])
+                          ->orWhereRaw('JSON_EXTRACT(gateway_payload, "$.pixQrCode") LIKE ?', ['%' . $pixPayload . '%'])
+                          ->orWhereRaw('JSON_EXTRACT(gateway_payload, "$.pix.payload") LIKE ?', ['%' . $pixPayload . '%']);
+                }
+                
+                // Busca por LIKE no JSON serializado (fallback)
+                $query->orWhere('gateway_payload', 'LIKE', '%' . $pixPayload . '%');
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        if ($registrations->isEmpty()) {
+            return response()->json([
+                'message' => 'Nenhuma inscrição encontrada para este payload PIX.'
+            ], 404);
+        }
+
+        // Agrupar por payment_id
+        $grouped = $registrations->groupBy('asaas_payment_id');
+        $firstGroup = $grouped->first();
+        $firstReg = $firstGroup->first();
+        
+        $totalAmount = $firstGroup->sum('price_paid');
+        
+        $paymentInfo = [
+            'id' => $firstReg->asaas_payment_id ?? null,
+            'payment_id' => $firstReg->asaas_payment_id ?? null,
+            'payment_method' => $firstReg->payment_method,
+            'payment_status' => $firstReg->payment_status,
+            'total_amount' => $totalAmount,
+            'total_amount_formatted' => number_format($totalAmount / 100, 2, ',', '.'),
+            'gateway_payload' => $firstReg->gateway_payload,
+            'created_at' => $firstReg->created_at instanceof \Carbon\Carbon ? $firstReg->created_at->toIso8601String() : (string) $firstReg->created_at,
+            'updated_at' => $firstGroup->max('updated_at') instanceof \Carbon\Carbon 
+                ? $firstGroup->max('updated_at')->toIso8601String() 
+                : (string) $firstGroup->max('updated_at'),
+            'registrations_count' => $firstGroup->count(),
+            'registrations' => $firstGroup->map(function ($reg) {
+                return [
+                    'id' => $reg->id,
+                    'registration_number' => $reg->registration_number,
+                    'qr_code' => $reg->qr_code,
+                    'name' => $reg->name,
+                    'phone' => $reg->phone,
+                    'cpf' => $reg->cpf,
+                    'birth_date' => $reg->birth_date ? ($reg->birth_date instanceof \Carbon\Carbon ? $reg->birth_date->format('Y-m-d') : $reg->birth_date) : null,
+                    'sector' => $reg->sector,
+                    'congregation' => $reg->congregation,
+                    'church_type' => $reg->church_type,
+                    'gender' => $reg->gender,
+                    'price_paid' => $reg->price_paid,
+                    'price_paid_formatted' => number_format($reg->price_paid / 100, 2, ',', '.'),
+                    'payment_status' => $reg->payment_status,
+                    'validated' => $reg->validated,
+                    'validated_at' => $reg->validated_at ? ($reg->validated_at instanceof \Carbon\Carbon ? $reg->validated_at->toIso8601String() : $reg->validated_at) : null,
+                    'validated_by' => $reg->validated_by,
+                    'asaas_payment_id' => $reg->asaas_payment_id,
+                    'event' => $reg->event ? [
+                        'id' => $reg->event->id,
+                        'name' => $reg->event->name,
+                        'description' => $reg->event->description,
+                        'start_date' => $reg->event->start_date ? ($reg->event->start_date instanceof \Carbon\Carbon ? $reg->event->start_date->format('Y-m-d') : $reg->event->start_date) : null,
+                        'end_date' => $reg->event->end_date ? ($reg->event->end_date instanceof \Carbon\Carbon ? $reg->event->end_date->format('Y-m-d') : $reg->event->end_date) : null,
+                        'price' => $reg->event->price,
+                        'image' => $reg->event->image,
+                    ] : null,
+                    'created_at' => $reg->created_at instanceof \Carbon\Carbon ? $reg->created_at->toIso8601String() : (string) $reg->created_at,
+                    'updated_at' => $reg->updated_at instanceof \Carbon\Carbon ? $reg->updated_at->toIso8601String() : (string) $reg->updated_at,
+                ];
+            })->values(),
         ];
 
         return response()->json($paymentInfo, 200);

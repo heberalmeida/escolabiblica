@@ -88,11 +88,13 @@ Route::prefix('v1')->group(function () {
     
     Route::post('/registrations', [RegistrationController::class, 'store']);
     Route::get('/registrations', [RegistrationController::class, 'index']);
-    Route::get('/registrations/{id}', [RegistrationController::class, 'show']);
+    // Rotas específicas devem vir antes da rota genérica {id}
     Route::get('/registrations/qr/{qrCode}', [RegistrationController::class, 'getByQrCode']);
     Route::get('/registrations/phone/{phone}', [RegistrationController::class, 'getByPhone']);
     Route::get('/registrations/by-cpf/{cpf}', [RegistrationController::class, 'getByCpf']);
     Route::get('/registrations/by-payment/{paymentId}', [RegistrationController::class, 'getByPaymentId']);
+    Route::post('/registrations/by-pix-payload', [RegistrationController::class, 'getByPixPayload']);
+    Route::get('/registrations/{id}', [RegistrationController::class, 'show']);
 
     // Validação de QR Code
     Route::post('/validate/qrcode', [QRCodeValidationController::class, 'validateByQrCode']);

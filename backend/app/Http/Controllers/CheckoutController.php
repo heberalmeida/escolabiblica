@@ -541,6 +541,7 @@ class CheckoutController extends Controller
                 'message' => 'Inscrições criadas com sucesso.',
                 'registrations' => $allRegistrations,
                 'payment' => [
+                    'id' => $charge['id'] ?? null, // Incluir payment_id na resposta
                     'method' => $data['payment']['method'],
                     'amount' => $finalAmountCents / 100, // Retornar valor final COM taxas em reais
                     'pix' => [

@@ -132,6 +132,9 @@ const loading = ref(true)
 const error = ref(null)
 const copiedPix = ref(false)
 const copiedBoleto = ref(false)
+let unsubscribe = null
+let isFetching = false
+let fetchTimeout = null
 
 const method = computed(() => {
   return (paymentData.value?.method || paymentInfo.value?.payment_method || '').toUpperCase()
@@ -197,11 +200,11 @@ function extractPaymentIdFromUrl(url) {
 function extractPaymentIdFromPixPayload(payload) {
   if (!payload) return null
   // O payload do PIX pode conter a URL do QR code: pix-h.asaas.com/qr/cobv/c2fc42c7-b139-47f7-8172-b83d4fb16a78
-  // Tentar extrair o UUID do final
-  const match = payload.match(/qr\/cobv\/([a-f0-9-]+)/i)
+  // Tentar extrair o UUID do final (formato: 8-4-4-4-12 caracteres hexadecimais)
+  const match = payload.match(/qr\/cobv\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
   if (match) return match[1]
   
-  // Tentar extrair qualquer UUID do payload
+  // Tentar extrair qualquer UUID válido do payload (formato exato)
   const uuidMatch = payload.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
   if (uuidMatch) return uuidMatch[1]
   
@@ -209,10 +212,16 @@ function extractPaymentIdFromPixPayload(payload) {
 }
 
 async function fetchRegistrations() {
+  // Prevenir múltiplas chamadas simultâneas
+  if (isFetching) {
+    return
+  }
+  
   try {
+    isFetching = true
     let paymentId = null
     
-    // Primeiro, tentar usar payment.id se disponível
+    // Primeiro, tentar usar payment.id se disponível (vem direto do backend)
     if (paymentData.value?.id) {
       paymentId = paymentData.value.id
     }
@@ -222,7 +231,7 @@ async function fetchRegistrations() {
       paymentId = extractPaymentIdFromUrl(paymentData.value.boletoUrl)
     }
     
-    // Se não, tentar extrair do payload do PIX
+    // Se não, tentar extrair do payload do PIX (última opção, menos confiável)
     if (!paymentId && paymentData.value?.pix?.payload) {
       paymentId = extractPaymentIdFromPixPayload(paymentData.value.pix.payload)
     }
@@ -230,39 +239,104 @@ async function fetchRegistrations() {
     // Se temos payment_id, buscar diretamente
     if (paymentId) {
       try {
-        const { data } = await http.get(`/registrations/by-payment/${paymentId}`)
+        // Limpar o payment_id - aceitar UUID ou formato Asaas (pay_xxxxx)
+        let cleanPaymentId = paymentId
+        
+        // Tentar extrair UUID se for formato UUID
+        const uuidMatch = paymentId.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i)
+        if (uuidMatch) {
+          cleanPaymentId = uuidMatch[1]
+        } else {
+          // Se não for UUID, aceitar formato Asaas (pay_xxxxx) ou qualquer string válida
+          cleanPaymentId = paymentId.trim()
+        }
+        
+        // Validar que o payment_id não está vazio
+        if (!cleanPaymentId || cleanPaymentId.length < 3) {
+          throw new Error('Payment ID inválido')
+        }
+        
+        const { data } = await http.get(`/registrations/by-payment/${encodeURIComponent(cleanPaymentId)}`)
         paymentInfo.value = data
         registrations.value = data.registrations || []
-        setupFirebaseListener(paymentId)
+        setupFirebaseListener(cleanPaymentId)
         loading.value = false
+        isFetching = false
         return
       } catch (err) {
         console.error('Erro ao buscar por payment_id:', err)
-        // Continuar tentando outras formas
+        console.log('Payment ID tentado:', paymentId)
+        
+        // Se falhou e temos payload do PIX, tentar buscar diretamente pelo payload
+        if (paymentData.value?.pix?.payload) {
+          try {
+            const { data } = await http.post('/registrations/by-pix-payload', {
+              payload: paymentData.value.pix.payload
+            })
+            paymentInfo.value = data
+            registrations.value = data.registrations || []
+            if (data.payment_id) {
+              setupFirebaseListener(data.payment_id)
+            }
+            loading.value = false
+            isFetching = false
+            return
+          } catch (pixErr) {
+            console.warn('Erro ao buscar por PIX payload:', pixErr)
+            // Continuar tentando outras formas
+          }
+        }
       }
     }
     
     // Se não encontrou, tentar buscar pelas registrations e encontrar pelo digitableLine ou pix
     try {
+      // Primeiro, tentar buscar registrations recentes (últimas 5 minutos) para encontrar pelo PIX payload
       const { data } = await http.get('/registrations', {
         params: { per_page: 100, group_by_payment: true }
       })
       
       if (data.data && Array.isArray(data.data)) {
-        const found = data.data.find(order => {
+        // Ordenar por data de criação (mais recente primeiro)
+        const sortedOrders = [...data.data].sort((a, b) => {
+          const dateA = new Date(a.created_at || 0)
+          const dateB = new Date(b.created_at || 0)
+          return dateB - dateA
+        })
+        
+        const found = sortedOrders.find(order => {
           // Se temos digitableLine, procurar por ela
           if (paymentData.value?.digitableLine) {
             return order.gateway_payload?.identificationField === paymentData.value.digitableLine
           }
-          // Se temos pix payload, procurar por ele
+          // Se temos pix payload, procurar por ele (comparação exata)
           if (paymentData.value?.pix?.payload) {
-            return order.gateway_payload?.pixQrCode === paymentData.value.pix.payload
+            const orderPixPayload = order.gateway_payload?.pixQrCode || order.gateway_payload?.pix?.payload
+            if (orderPixPayload === paymentData.value.pix.payload) {
+              return true
+            }
+            // Também tentar comparar apenas o UUID do payload (mais flexível)
+            const pixUuid = extractPaymentIdFromPixPayload(paymentData.value.pix.payload)
+            if (pixUuid) {
+              // Verificar se o payment_id contém o UUID ou vice-versa
+              if (order.payment_id && (order.payment_id.includes(pixUuid) || pixUuid.includes(order.payment_id))) {
+                return true
+              }
+              // Verificar se algum registration tem o payment_id que contém o UUID
+              if (order.registrations && order.registrations.some(reg => {
+                const regPaymentId = reg.asaas_payment_id || reg.payment_id
+                return regPaymentId && (regPaymentId.includes(pixUuid) || pixUuid.includes(regPaymentId))
+              })) {
+                return true
+              }
+            }
           }
-          // Procurar por valor e método de pagamento
+          // Procurar por valor e método de pagamento (última opção)
           if (paymentData.value?.amount) {
             const orderAmount = order.total_amount / 100
             const paymentAmount = paymentData.value.amount
-            return Math.abs(orderAmount - paymentAmount) < 0.01 && 
+            // Tolerância de 1 centavo para diferenças de arredondamento
+            return Math.abs(orderAmount - paymentAmount) < 0.02 && 
                    order.payment_method === paymentData.value.method
           }
           return false
@@ -272,47 +346,82 @@ async function fetchRegistrations() {
           paymentInfo.value = found
           registrations.value = found.registrations || []
           const foundPaymentId = found.payment_id || found.id
-          setupFirebaseListener(foundPaymentId)
+          if (foundPaymentId) {
+            setupFirebaseListener(foundPaymentId)
+            // Tentar buscar detalhes completos se tiver payment_id válido
+            if (foundPaymentId && foundPaymentId.length >= 8) {
+              try {
+                const { data: paymentDetails } = await http.get(`/registrations/by-payment/${foundPaymentId}`)
+                paymentInfo.value = paymentDetails
+                registrations.value = paymentDetails.registrations || []
+              } catch (err) {
+                console.warn('Erro ao buscar detalhes do pagamento:', err)
+                // Usar os dados já encontrados (já temos tudo que precisamos)
+              }
+            }
+          }
           loading.value = false
+          isFetching = false
           return
         }
       }
     } catch (err) {
       console.error('Erro ao buscar registrations:', err)
+    } finally {
+      isFetching = false
     }
     
-    // Se não encontrou, usar os dados do paymentData
-    paymentInfo.value = {
-      payment_method: paymentData.value.method,
-      payment_status: paymentData.value.creditCard?.status === 'CONFIRMED' ? 'paid' : 'pending',
-      total_amount: paymentData.value.amount * 100,
-      gateway_payload: paymentData.value
+    // Se não encontrou, usar os dados do paymentData diretamente
+    // Isso permite mostrar a página mesmo sem encontrar no banco ainda
+    if (!paymentInfo.value || !paymentInfo.value.payment_id) {
+      paymentInfo.value = {
+        id: paymentData.value?.id || null,
+        payment_id: paymentData.value?.id || null,
+        payment_method: paymentData.value?.method || 'PIX',
+        payment_status: paymentData.value?.creditCard?.status === 'CONFIRMED' ? 'paid' : 'pending',
+        total_amount: paymentData.value?.amount ? Math.round(paymentData.value.amount * 100) : 0,
+        total_amount_formatted: paymentData.value?.amount ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paymentData.value.amount) : 'R$ 0,00',
+        gateway_payload: paymentData.value,
+        registrations: [],
+        registrations_count: 0,
+      }
+      
+      // Tentar buscar novamente após alguns segundos caso não tenha encontrado
+      // Isso é útil quando o pagamento foi feito mas ainda não foi processado
+      if (!paymentId && paymentData.value?.method === 'PIX') {
+        // Aguardar 3 segundos antes de tentar novamente (dar tempo para o webhook processar)
+        setTimeout(async () => {
+          if (!isFetching) {
+            await fetchRegistrations()
+          }
+        }, 3000)
+      }
     }
     
-    // Tentar buscar novamente após alguns segundos caso não tenha encontrado
-    // Isso é útil quando o pagamento foi feito mas ainda não foi processado
-    if (!paymentId && paymentData.value.method === 'PIX') {
-      setTimeout(async () => {
-        await fetchRegistrations()
-      }, 5000) // Tentar novamente após 5 segundos
-    }
+    loading.value = false
   } catch (err) {
     console.error('Erro ao buscar registrations:', err)
     // Continuar com os dados do paymentData
-    paymentInfo.value = {
-      payment_method: paymentData.value.method,
-      payment_status: 'pending',
-      total_amount: paymentData.value.amount * 100,
-      gateway_payload: paymentData.value
+    if (!paymentInfo.value || !paymentInfo.value.payment_id) {
+      paymentInfo.value = {
+        id: paymentData.value?.id || null,
+        payment_id: paymentData.value?.id || null,
+        payment_method: paymentData.value?.method || 'PIX',
+        payment_status: 'pending',
+        total_amount: paymentData.value?.amount ? Math.round(paymentData.value.amount * 100) : 0,
+        total_amount_formatted: paymentData.value?.amount ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(paymentData.value.amount) : 'R$ 0,00',
+        gateway_payload: paymentData.value,
+        registrations: [],
+        registrations_count: 0,
+      }
     }
   } finally {
+    isFetching = false
     loading.value = false
   }
 }
-
-let unsubscribe = null
-
-function setupFirebaseListener(paymentId) {
+  
+  function setupFirebaseListener(paymentId) {
   if (unsubscribe) unsubscribe()
   unsubscribe = null
   
@@ -328,12 +437,24 @@ function setupFirebaseListener(paymentId) {
       const data = snapshot.val()
       const updateToken = data.last_updated || JSON.stringify(data)
       
-      // Evitar recarregar se for a mesma atualização
-      if (updateToken === lastPaymentUpdate) return
+      // Evitar recarregar se for a mesma atualização ou se já está carregando
+      if (updateToken === lastPaymentUpdate || isFetching) return
       lastPaymentUpdate = updateToken
       
-      // Recarregar sempre que houver atualização
-      await fetchRegistrations()
+      // Debounce: aguardar 1 segundo antes de recarregar para evitar múltiplas chamadas
+      if (fetchTimeout) {
+        clearTimeout(fetchTimeout)
+      }
+      fetchTimeout = setTimeout(async () => {
+        if (!isFetching) {
+          isFetching = true
+          try {
+            await fetchRegistrations()
+          } finally {
+            isFetching = false
+          }
+        }
+      }, 1000)
     }
   })
   
@@ -348,12 +469,24 @@ function setupFirebaseListener(paymentId) {
         const data = snapshot.val()
         const updateToken = data.last_updated || JSON.stringify(data)
         
-        // Evitar recarregar se for a mesma atualização
-        if (updateToken === lastPhoneUpdate) return
+        // Evitar recarregar se for a mesma atualização ou se já está carregando
+        if (updateToken === lastPhoneUpdate || isFetching) return
         lastPhoneUpdate = updateToken
         
-        // Recarregar sempre que houver atualização
-        await fetchRegistrations()
+        // Debounce: aguardar 1 segundo antes de recarregar
+        if (fetchTimeout) {
+          clearTimeout(fetchTimeout)
+        }
+        fetchTimeout = setTimeout(async () => {
+          if (!isFetching) {
+            isFetching = true
+            try {
+              await fetchRegistrations()
+            } finally {
+              isFetching = false
+            }
+          }
+        }, 1000)
       }
     })
     
@@ -362,6 +495,10 @@ function setupFirebaseListener(paymentId) {
     unsubscribe = () => {
       if (originalUnsubscribe) originalUnsubscribe()
       if (phoneUnsubscribe) phoneUnsubscribe()
+      if (fetchTimeout) {
+        clearTimeout(fetchTimeout)
+        fetchTimeout = null
+      }
     }
   }
 }
@@ -390,5 +527,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (unsubscribe) unsubscribe()
+  if (fetchTimeout) {
+    clearTimeout(fetchTimeout)
+    fetchTimeout = null
+  }
+  isFetching = false
 })
 </script>

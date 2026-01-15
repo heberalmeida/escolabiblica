@@ -16,6 +16,7 @@ export const registrationsApi = {
   getByPhone: (phone) => http.get(`/registrations/phone/${phone}`),
   getByCpf: (cpf, params = {}) => http.get(`/registrations/by-cpf/${cpf}`, { params }),
   getByPaymentId: (paymentId) => http.get(`/registrations/by-payment/${paymentId}`),
+  getByPixPayload: (payload) => http.post('/registrations/by-pix-payload', { payload }),
   markAsPaid: (id) => http.put(`/admin/registrations/${id}/mark-as-paid`),
 }
 
