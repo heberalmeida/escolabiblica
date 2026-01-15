@@ -203,11 +203,9 @@ function getImageUrl(path) {
   if (!path) return ''
   if (path.startsWith('http')) return path
   if (path.startsWith('data:')) return path
-  // Se já começa com /api/v1/storage, retornar como está (evitar duplicação)
-  if (path.startsWith('/api/v1/storage/')) {
-    return `${import.meta.env.VITE_API_BASE_URL}${path}`
-  }
-  return `${import.meta.env.VITE_API_BASE_URL}/api/v1/storage/${path}`
+  // Remover /api/v1 do baseURL se existir, pois a rota /storage está em web.php
+  const baseUrl = import.meta.env.VITE_API_BASE_URL.replace(/\/api\/v1$/, '')
+  return `${baseUrl}/storage/${path}`
 }
 
 function askClearAll() {
