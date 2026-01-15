@@ -131,6 +131,19 @@ jobs:
             if [ -f .env.prod ]; then
               cp .env.prod .env
               echo "✅ .env.prod copiado para .env"
+              
+              # Verificar se APP_KEY existe no .env
+              if ! grep -q "APP_KEY=base64:" .env 2>/dev/null || grep -q "APP_KEY=$" .env 2>/dev/null || grep -q "^APP_KEY=\s*$" .env 2>/dev/null; then
+                echo "⚠️ APP_KEY não encontrada ou vazia. Gerando nova chave..."
+                if command -v php8.3 &> /dev/null; then
+                  php8.3 artisan key:generate --force
+                else
+                  php artisan key:generate --force
+                fi
+                echo "✅ APP_KEY gerada com sucesso"
+              else
+                echo "✅ APP_KEY já configurada"
+              fi
             else
               echo "⚠️ AVISO: Arquivo .env.prod não encontrado no servidor"
             fi
@@ -208,6 +221,16 @@ jobs:
               npm run production || npm run prod || npm run build
             else
               echo "⏭️ Pulando compilação de assets (sem alterações)"
+            fi
+            
+            # Verificar variáveis de ambiente
+            echo "🔍 Verificando variáveis de ambiente..."
+            if [ -f check-env.php ]; then
+              if command -v php8.3 &> /dev/null; then
+                php8.3 check-env.php || echo "⚠️ Algumas verificações falharam, mas continuando..."
+              else
+                php check-env.php || echo "⚠️ Algumas verificações falharam, mas continuando..."
+              fi
             fi
             
             # Run Laravel commands with PHP 8.3

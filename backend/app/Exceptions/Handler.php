@@ -50,9 +50,33 @@ class Handler extends ExceptionHandler
             ], 404);
         }
 
+        // Log do erro para diagnóstico
+        \Log::error('Erro interno no servidor', [
+            'message' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => $exception->getTraceAsString(),
+        ]);
+
+        $isDebug = config('app.debug', false);
+        
+        // Verificar se é erro de configuração comum
+        $errorMessage = $exception->getMessage();
+        $hint = null;
+        
+        if (str_contains($errorMessage, 'APP_KEY') || str_contains($errorMessage, 'No application encryption key')) {
+            $hint = 'APP_KEY não configurada. Execute: php artisan key:generate';
+        } elseif (str_contains($errorMessage, 'database') || str_contains($errorMessage, 'SQLSTATE')) {
+            $hint = 'Erro de conexão com banco de dados. Verifique as credenciais no .env';
+        } elseif (str_contains($errorMessage, 'cache') || str_contains($errorMessage, 'config')) {
+            $hint = 'Cache desatualizado. Execute: php artisan config:clear && php artisan cache:clear';
+        }
+
         return response()->json([
             'message' => 'Erro interno no servidor.',
-            'error' => config('app.debug') ? $exception->getMessage() : null,
+            'error' => $isDebug ? $exception->getMessage() : null,
+            'hint' => $hint,
+            'file' => $isDebug ? $exception->getFile() . ':' . $exception->getLine() : null,
         ], 500);
     }
 }
