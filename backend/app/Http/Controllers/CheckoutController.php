@@ -39,7 +39,7 @@ class CheckoutController extends Controller
             'payment.method'        => 'required|in:BOLETO,PIX,CREDIT_CARD',
             'payment.card'          => 'array',
             'payment.tax'           => 'array',
-            'payment.installments'  => 'nullable|integer|min:1|max:21',
+            'payment.installments'  => 'nullable|integer|min:1|max:10',
         ]);
 
         return DB::transaction(function () use ($data, $asaas) {
@@ -292,7 +292,7 @@ class CheckoutController extends Controller
             'events.*.registrations.*.whatsapp_authorization' => 'nullable|boolean',
             'payment.method'        => 'required|in:BOLETO,PIX,CREDIT_CARD,FREE',
             'payment.card'          => 'nullable|array',
-            'payment.installments'  => 'nullable|integer|min:1|max:21',
+            'payment.installments'  => 'nullable|integer|min:1|max:10',
             'payment.tax'           => 'nullable|array',
         ];
 
@@ -407,13 +407,12 @@ class CheckoutController extends Controller
                     $fixCents = 49; // R$ 0,49
                     // Calcular percentual baseado no número de parcelas
                     if ($installments === 1) {
-                        $percent = 2.99;
+                        // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
+                        $percent = 2.99 + 1.25; // Total: 4,24%
                     } elseif ($installments >= 2 && $installments <= 6) {
-                        $percent = 3.49 + (1.70 * $installments);
+                        $percent = 3.49;
                     } elseif ($installments >= 7 && $installments <= 12) {
-                        $percent = 3.99 + (1.70 * $installments);
-                    } elseif ($installments >= 13 && $installments <= 21) {
-                        $percent = 4.29 + (1.70 * $installments);
+                        $percent = 3.99;
                     }
                 }
             }

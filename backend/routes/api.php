@@ -81,6 +81,20 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/cep/{cep}', [CepController::class, 'show']);
 
+    // Rota para servir arquivos do storage
+    Route::get('/storage/{path}', function ($path) {
+        $path = urldecode($path);
+        
+        if (!\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+        
+        $file = \Illuminate\Support\Facades\Storage::disk('public')->get($path);
+        $mime = \Illuminate\Support\Facades\Storage::disk('public')->mimeType($path);
+        
+        return \Illuminate\Support\Facades\Response::make($file, 200)->header('Content-Type', $mime);
+    })->where('path', '.*');
+
     // Eventos e Inscrições
     Route::get('/events', [EventController::class, 'index']);
     Route::get('/events/{id}', [EventController::class, 'show']);

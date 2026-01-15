@@ -8,7 +8,7 @@
         </h1>
 
         <button
-          v-if="savedCpf || registrations.length"
+          v-if="(savedCpf && savedBirthDate) || registrations.length"
           @click="logout"
           class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm cursor-pointer inline-flex items-center gap-2">
           <font-awesome-icon :icon="['fas', 'sign-out-alt']" />
@@ -17,12 +17,16 @@
       </div>
 
       <form @submit.prevent="search"
-        class="flex flex-col sm:flex-row gap-4 justify-center mb-10">
-        <input v-model="cpf" v-maska="'###.###.###-##'" placeholder="Digite seu CPF"
-          class="w-full sm:w-72 bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-        <button type="submit" :disabled="loading"
+        class="flex flex-col gap-4 justify-center mb-10 max-w-2xl mx-auto">
+        <div class="flex flex-col sm:flex-row gap-4">
+          <input v-model="cpf" v-maska="'###.###.###-##'" placeholder="Digite seu CPF"
+            class="flex-1 bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+          <input v-model="birthDate" v-maska="'##/##/####'" placeholder="DD/MM/AAAA"
+            class="flex-1 bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+        </div>
+        <button type="submit" :disabled="loading || !cpf || !birthDate"
           class="bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-blue-700 disabled:bg-gray-400 transition">
-          {{ loading ? 'Buscando...' : 'Buscar' }}
+          {{ loading ? 'Buscando...' : 'Buscar Inscrições' }}
         </button>
       </form>
 
@@ -144,12 +148,14 @@ function useSessionStorage(key, initialValue = null) {
 }
 
 const cpf = ref('')
+const birthDate = ref('')
 const registrations = ref([])
 const loading = ref(false)
 const error = ref(null)
 const currentPage = ref(1)
 const lastPage = ref(1)
 const { data: savedCpf, set: setCpfSession, clear: clearCpfSession } = useSessionStorage('user_cpf_registrations', '')
+const { data: savedBirthDate, set: setBirthDateSession, clear: clearBirthDateSession } = useSessionStorage('user_birth_date_registrations', '')
 const unsubscribeFns = ref([])
 let lastUpdateToken = null
 
@@ -157,8 +163,15 @@ const orders = ref([]) // Pedidos agrupados
 const allRegistrations = ref([]) // Todas as registrations para impressão
 
 onMounted(() => {
-  if (savedCpf.value) {
+  if (savedCpf.value && savedBirthDate.value) {
     cpf.value = savedCpf.value
+    // Se a data salva está em formato AAAA-MM-DD, converter para DD/MM/AAAA
+    if (savedBirthDate.value.includes('-') && savedBirthDate.value.length === 10) {
+      const [year, month, day] = savedBirthDate.value.split('-')
+      birthDate.value = `${day}/${month}/${year}`
+    } else {
+      birthDate.value = savedBirthDate.value
+    }
     search(true, 1)
   }
 })
@@ -175,13 +188,41 @@ async function search(setupListeners = false, page = 1) {
     error.value = 'CPF inválido.'
     return
   }
+  
+  if (!birthDate.value) {
+    error.value = 'Por favor, informe sua data de nascimento.'
+    return
+  }
+  
+  // Validar formato da data DD/MM/AAAA
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(birthDate.value)) {
+    error.value = 'Data de nascimento inválida. Use o formato DD/MM/AAAA.'
+    return
+  }
+  
+  // Converter data de DD/MM/AAAA para AAAA-MM-DD
+  const [day, month, year] = birthDate.value.split('/')
+  const formattedBirthDate = `${year}-${month}-${day}`
+  
+  // Validar se é uma data válida
+  const dateObj = new Date(year, month - 1, day)
+  if (dateObj.getFullYear() != year || dateObj.getMonth() != month - 1 || dateObj.getDate() != day) {
+    error.value = 'Data de nascimento inválida.'
+    return
+  }
+  
   loading.value = true
   error.value = null
   orders.value = []
   allRegistrations.value = []
   try {
     // Buscar registrations agrupadas por pagamento
-    const { data } = await registrationsApi.getByCpf(cleanCpf, { page, per_page: 10, group_by_payment: true })
+    const { data } = await registrationsApi.getByCpf(cleanCpf, { 
+      page, 
+      per_page: 12, 
+      group_by_payment: true,
+      birth_date: formattedBirthDate
+    })
     
     if (data.data && Array.isArray(data.data)) {
       // Dados já vêm agrupados do backend
@@ -227,6 +268,8 @@ async function search(setupListeners = false, page = 1) {
     currentPage.value = data.current_page || 1
     lastPage.value = data.last_page || 1
     setCpfSession(cpf.value)
+    // Salvar no formato DD/MM/AAAA para exibição
+    setBirthDateSession(birthDate.value)
     
     // Configurar listeners do Firebase
     if (setupListeners || savedCpf.value) {
@@ -238,9 +281,11 @@ async function search(setupListeners = false, page = 1) {
     await generateQRCodes()
   } catch (err) {
     if (err.response?.status === 404) {
-      error.value = 'Nenhuma inscrição encontrada para este CPF.'
+      error.value = 'Nenhuma inscrição encontrada para este CPF e data de nascimento.'
+    } else if (err.response?.status === 422) {
+      error.value = err.response?.data?.message || 'Dados inválidos. Verifique o CPF e a data de nascimento.'
     } else {
-      error.value = 'Não foi possível buscar as inscrições. Verifique o CPF e tente novamente.'
+      error.value = 'Não foi possível buscar as inscrições. Verifique o CPF e a data de nascimento e tente novamente.'
     }
   } finally {
     loading.value = false
@@ -655,10 +700,12 @@ function validateCpf(c) {
 
 function logout() {
   cpf.value = ''
+  birthDate.value = ''
   orders.value = []
   allRegistrations.value = []
   error.value = null
   clearCpfSession()
+  clearBirthDateSession()
   unsubscribeFns.value.forEach(fn => fn && fn())
   unsubscribeFns.value = []
   lastUpdateToken = null

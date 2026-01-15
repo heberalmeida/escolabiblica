@@ -60,6 +60,14 @@ mkdir -p bootstrap/cache
 chmod -R 775 storage bootstrap/cache
 chown -R admcg-api-escolabiblica:admcg-api-escolabiblica storage bootstrap/cache 2>/dev/null || true
 
+# Criar link simbólico do storage
+echo "🔗 Criando link simbólico do storage..."
+if command -v php8.3 &> /dev/null; then
+    php8.3 artisan storage:link || true
+else
+    php artisan storage:link || true
+fi
+
 echo ""
 echo "✅ Correções aplicadas!"
 echo ""

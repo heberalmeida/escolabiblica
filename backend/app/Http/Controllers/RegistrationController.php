@@ -328,7 +328,7 @@ class RegistrationController extends Controller
             'card.expiryMonth' => 'nullable|string|max:2',
             'card.expiryYear' => 'nullable|string|max:4',
             'card.ccv' => 'nullable|string|max:4',
-            'installments' => 'nullable|integer|min:1|max:21',
+            'installments' => 'nullable|integer|min:1|max:10',
         ]);
 
         $event = Event::with('paymentMethods')->findOrFail($data['event_id']);
@@ -606,11 +606,29 @@ class RegistrationController extends Controller
     public function getByCpf(Request $request, string $cpf)
     {
         $cpf = preg_replace('/\D/', '', $cpf);
+        $birthDate = $request->input('birth_date');
         $perPage = $request->input('per_page', 10);
         $groupByPayment = $request->input('group_by_payment', false); // Por padrão não agrupa para manter compatibilidade
 
+        // Validar que a data de nascimento foi fornecida
+        if (!$birthDate) {
+            return response()->json([
+                'message' => 'Data de nascimento é obrigatória para acessar as inscrições.'
+            ], 422);
+        }
+
+        // Validar formato da data
+        try {
+            $birthDateParsed = \Carbon\Carbon::parse($birthDate);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Data de nascimento inválida. Use o formato YYYY-MM-DD.'
+            ], 422);
+        }
+
         $query = Registration::with('event')
             ->where('cpf', $cpf)
+            ->whereDate('birth_date', $birthDateParsed->format('Y-m-d'))
             ->orderByDesc('created_at');
 
         // Se não agrupar, retornar lista simples
@@ -619,7 +637,7 @@ class RegistrationController extends Controller
 
             if ($registrations->isEmpty()) {
                 return response()->json([
-                    'message' => 'Nenhuma inscrição encontrada para este CPF.'
+                    'message' => 'Nenhuma inscrição encontrada para este CPF e data de nascimento.'
                 ], 404);
             }
 
@@ -631,7 +649,7 @@ class RegistrationController extends Controller
 
         if ($allRegistrations->isEmpty()) {
             return response()->json([
-                'message' => 'Nenhuma inscrição encontrada para este CPF.'
+                'message' => 'Nenhuma inscrição encontrada para este CPF e data de nascimento.'
             ], 404);
         }
 

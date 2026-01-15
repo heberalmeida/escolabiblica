@@ -650,7 +650,7 @@ const schema = computed(() => {
     method: yup.string().oneOf(['PIX', 'BOLETO', 'CREDIT_CARD', 'FREE'], 'Selecione um método').required('Selecione um método'),
     installments: yup.number().when('method', {
       is: 'CREDIT_CARD',
-      then: s => s.required('Selecione o parcelamento').min(1).max(21),
+      then: s => s.required('Selecione o parcelamento').min(1).max(10),
       otherwise: s => s.notRequired()
     }),
     card: yup.mixed().when('method', {
@@ -726,33 +726,54 @@ const schema = computed(() => {
 
 const installmentOptions = computed(() => {
   const max = 10
-  const minTotal = 20000
+  const fix = 49 // R$ 0,49 em centavos
   const options = []
+  
+  // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
+  const vistaPercent = 2.99 + 1.25 // Total: 4,24%
+  const vistaTotal = total.value + fix + total.value * (vistaPercent / 100)
   options.push({
     count: 1,
-    parcela: total.value + 49 + total.value * (2.99 / 100),
-    total: total.value + 49 + total.value * (2.99 / 100),
-    percent: 2.99
+    parcela: vistaTotal,
+    total: vistaTotal,
+    percent: vistaPercent
   })
-  if (total.value >= minTotal) {
-    for (let n = 2; n <= max; n++) {
+  
+  // Regras de valor mínimo:
+  // 2x: mínimo R$ 60 (6000 centavos)
+  // 3x: mínimo R$ 60 (6000 centavos) - seguindo a regra de 2x
+  // 4x: mínimo R$ 120 (12000 centavos)
+  // 5x até 10x: mínimo R$ 120 (12000 centavos) - seguindo a regra de 4x
+  
+  for (let n = 2; n <= max; n++) {
+    // Verificar valor mínimo baseado no número de parcelas
+    let minValue = 0
+    if (n === 2 || n === 3) {
+      minValue = 6000 // R$ 60 para 2x e 3x
+    } else if (n >= 4) {
+      minValue = 12000 // R$ 120 para 4x e acima
+    }
+    
+    // Só adicionar se o valor total atender ao mínimo
+    if (total.value >= minValue) {
       let percent = 0
-      const fix = 49
       if (n >= 2 && n <= 6) {
-        percent = 3.49 + (1.70 * n)
-      } else if (n >= 7 && n <= 10) {
-        percent = 3.99 + (1.70 * n)
+        percent = 3.49
+      } else if (n >= 7 && n <= 12) {
+        percent = 3.99
       }
+      
       const totalComTaxa = total.value + fix + total.value * (percent / 100)
       const parcela = totalComTaxa / n
       options.push({ count: n, parcela, total: totalComTaxa, percent })
     }
   }
+  
   return options
 })
 
 function grandTotal(vals) {
-  const fix = 49
+  const fix = 49 // R$ 0,49 em centavos
   if (!vals?.method) return total.value
   // PIX não tem taxa - sempre retornar valor sem taxa
   if (vals.method === 'PIX') return total.value
@@ -760,10 +781,14 @@ function grandTotal(vals) {
   if (vals.method === 'CREDIT_CARD' && chargeCard) {
     const n = Number(vals.installments || 1)
     let percent = 0
-    if (n === 1) percent = 2.99
-    else if (n >= 2 && n <= 6) percent = 3.49 + (1.70 * n)
-    else if (n >= 7 && n <= 12) percent = 3.99 + (1.70 * n)
-    else if (n >= 13 && n <= 21) percent = 4.29 + (1.70 * n)
+    if (n === 1) {
+      // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
+      percent = 2.99 + 1.25 // Total: 4,24%
+    } else if (n >= 2 && n <= 6) {
+      percent = 3.49
+    } else if (n >= 7 && n <= 12) {
+      percent = 3.99
+    }
     return total.value + fix + total.value * (percent / 100)
   }
   return total.value
@@ -772,10 +797,9 @@ function grandTotal(vals) {
 function cardTax(vals) {
   if (vals.method !== 'CREDIT_CARD' || !chargeCard) return null
   const n = Number(vals.installments || 1)
-  if (n === 1) return `R$ 0,49 + 2,99%`
-  if (n >= 2 && n <= 6) return `R$ 0,49 + ${(3.49 + 1.70 * n).toFixed(2)}%`
-  if (n >= 7 && n <= 12) return `R$ 0,49 + ${(3.99 + 1.70 * n).toFixed(2)}%`
-  if (n >= 13 && n <= 21) return `R$ 0,49 + ${(4.29 + 1.70 * n).toFixed(2)}%`
+  if (n === 1) return `R$ 0,49 + 2,99% + 1,25%`
+  if (n >= 2 && n <= 6) return `R$ 0,49 + 3,49%`
+  if (n >= 7 && n <= 12) return `R$ 0,49 + 3,99%`
   return null
 }
 
@@ -828,10 +852,12 @@ function buildPayload(vals) {
 }
 
 function cardPercent(n) {
-  if (n === 1) return 2.99
-  if (n >= 2 && n <= 6) return 3.49 + (1.70 * n)
-  if (n >= 7 && n <= 12) return 3.99 + (1.70 * n)
-  if (n >= 13 && n <= 21) return 4.29 + (1.70 * n)
+  if (n === 1) {
+    // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
+    return 2.99 + 1.25 // Total: 4,24%
+  }
+  if (n >= 2 && n <= 6) return 3.49
+  if (n >= 7 && n <= 12) return 3.99
   return 0
 }
 

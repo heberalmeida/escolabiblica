@@ -58,11 +58,30 @@
           <p class="text-xs text-gray-500 mt-1">Ex: 50000 = R$ 500,00 (0 = Gratuito)</p>
         </div>
 
-        <div>
+        <div class="md:col-span-2">
           <label class="block mb-1 font-medium">Imagem do Evento</label>
-          <input type="file" accept="image/*" @change="handleImageChange" class="w-full border rounded-lg p-2" />
-          <div v-if="imagePreview" class="mt-2">
-            <img :src="imagePreview" alt="Preview" class="max-w-xs rounded-lg" />
+          <div class="space-y-3">
+            <div v-if="imagePreview" class="relative inline-block">
+              <img :src="imagePreview" alt="Preview" class="max-w-xs rounded-lg border border-gray-300 shadow-sm" />
+              <button
+                type="button"
+                @click="removeImage"
+                class="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 transition"
+                title="Remover imagem"
+              >
+                <font-awesome-icon :icon="['fas', 'times-circle']" class="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <input
+                type="file"
+                ref="fileInput"
+                accept="image/*"
+                @change="handleImageChange"
+                class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p class="text-xs text-gray-500 mt-1">Formatos aceitos: JPG, PNG, GIF, WEBP</p>
+            </div>
           </div>
         </div>
 
@@ -126,6 +145,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Form, Field, ErrorMessage } from 'vee-validate'
 import * as yup from 'yup'
 import { eventsApi } from '@/api/events'
+import { FontAwesomeIcon } from '@/plugins/fontawesome'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,6 +154,8 @@ const loading = ref(false)
 const submitting = ref(false)
 const imagePreview = ref(null)
 const imageFile = ref(null)
+const fileInput = ref(null)
+const currentImagePath = ref(null)
 
 const schema = yup.object({
   name: yup.string().required('Nome é obrigatório'),
@@ -172,6 +194,7 @@ async function loadEvent() {
       payment_methods: data.payment_methods?.map(pm => pm.method) || [],
     }
     if (data.image) {
+      currentImagePath.value = data.image
       imagePreview.value = getImageUrl(data.image)
     }
   } catch (error) {
@@ -185,6 +208,25 @@ async function loadEvent() {
 function handleImageChange(event) {
   const file = event.target.files[0]
   if (file) {
+    // Validar tipo de arquivo
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      alert('Formato de imagem não suportado. Use JPG, PNG, GIF ou WEBP.')
+      if (fileInput.value) {
+        fileInput.value.value = ''
+      }
+      return
+    }
+    
+    // Validar tamanho (máximo 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Imagem muito grande. Tamanho máximo: 5MB.')
+      if (fileInput.value) {
+        fileInput.value.value = ''
+      }
+      return
+    }
+    
     imageFile.value = file
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -194,16 +236,30 @@ function handleImageChange(event) {
   }
 }
 
+function removeImage() {
+  imageFile.value = null
+  imagePreview.value = null
+  currentImagePath.value = null
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
 async function onSubmit(values) {
   try {
     submitting.value = true
     const formData = { ...values }
 
+    // Se há um novo arquivo selecionado, enviar como base64
     if (imageFile.value) {
       formData.image = imagePreview.value // base64
-    } else if (imagePreview.value && imagePreview.value.startsWith('data:')) {
-      formData.image = imagePreview.value
+    } 
+    // Se está editando e removeu a imagem (imagePreview é null mas havia imagem antes)
+    else if (isEditing.value && !imagePreview.value && currentImagePath.value) {
+      // Usuário removeu a imagem, enviar string vazia para remover
+      formData.image = ''
     }
+    // Se não está editando e não há imagem, não enviar campo de imagem
 
     if (isEditing.value) {
       await eventsApi.update(route.params.id, formData)
@@ -214,7 +270,8 @@ async function onSubmit(values) {
     router.push('/admin/events')
   } catch (error) {
     console.error('Erro ao salvar evento:', error)
-    alert('Erro ao salvar evento')
+    const errorMessage = error.response?.data?.message || error.message || 'Erro ao salvar evento'
+    alert(errorMessage)
   } finally {
     submitting.value = false
   }
@@ -224,6 +281,10 @@ function getImageUrl(path) {
   if (!path) return ''
   if (path.startsWith('http')) return path
   if (path.startsWith('data:')) return path
-  return `${import.meta.env.VITE_API_BASE_URL}/storage/${path}`
+  // Se já começa com /api/v1/storage, retornar como está (evitar duplicação)
+  if (path.startsWith('/api/v1/storage/')) {
+    return `${import.meta.env.VITE_API_BASE_URL}${path}`
+  }
+  return `${import.meta.env.VITE_API_BASE_URL}/api/v1/storage/${path}`
 }
 </script>

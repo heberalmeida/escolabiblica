@@ -109,7 +109,7 @@ class EventController extends Controller
             'description' => 'nullable|string',
             'start_date' => 'sometimes|date',
             'end_date' => 'sometimes|date|after_or_equal:start_date',
-            'image' => 'nullable|string',
+            'image' => 'nullable',
             'price' => 'sometimes|integer|min:0',
             'active' => 'boolean',
             'payment_methods' => 'array',
@@ -117,12 +117,22 @@ class EventController extends Controller
         ]);
 
         return DB::transaction(function () use ($event, $data) {
-            if (!empty($data['image'])) {
-                // Remove imagem antiga se existir
-                if ($event->image && Storage::disk('public')->exists($event->image)) {
-                    Storage::disk('public')->delete($event->image);
+            // Se image foi enviado no request, processar
+            if (array_key_exists('image', $data)) {
+                // Se image é null ou string vazia, remover imagem
+                if ($data['image'] === null || $data['image'] === '') {
+                    // Remove imagem antiga se existir
+                    if ($event->image && Storage::disk('public')->exists($event->image)) {
+                        Storage::disk('public')->delete($event->image);
+                    }
+                    $data['image'] = null;
+                } elseif (!empty($data['image']) && is_string($data['image'])) {
+                    // Remove imagem antiga se existir
+                    if ($event->image && Storage::disk('public')->exists($event->image)) {
+                        Storage::disk('public')->delete($event->image);
+                    }
+                    $data['image'] = $this->storeImage($data['image']);
                 }
-                $data['image'] = $this->storeImage($data['image']);
             }
 
             $event->update($data);

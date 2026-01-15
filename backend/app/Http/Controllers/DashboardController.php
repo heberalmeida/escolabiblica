@@ -245,29 +245,25 @@ class DashboardController extends Controller
             }
         }
         
-        // Adicionar gratuitas pagas
+        // Buscar gratuitas pagas primeiro (para usar em todas as estatísticas)
         $freePaid = (clone $registrationsQuery)
             ->whereNull('asaas_payment_id')
             ->where('payment_status', 'paid')
-            ->whereNotNull('sector')
             ->get();
         
+        // Adicionar gratuitas pagas ao setor
         foreach ($freePaid as $reg) {
             if ($sectorFilter && $reg->sector !== $sectorFilter) continue;
-            $sector = $reg->sector;
-            if (!isset($paidBySector[$sector])) {
-                $paidBySector[$sector] = 0;
+            if ($reg->sector) {
+                $sector = $reg->sector;
+                if (!isset($paidBySector[$sector])) {
+                    $paidBySector[$sector] = 0;
+                }
+                $paidBySector[$sector]++;
             }
-            $paidBySector[$sector]++;
         }
         
         arsort($paidBySector);
-
-        // Buscar gratuitas pagas primeiro
-        $freePaid = (clone $registrationsQuery)
-            ->whereNull('asaas_payment_id')
-            ->where('payment_status', 'paid')
-            ->get();
 
         // Contar pagas por sexo (inscrições individuais)
         $paidByGender = [];
