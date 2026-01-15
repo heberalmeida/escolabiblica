@@ -24,7 +24,7 @@
           <div>
             <strong>Evento:</strong> {{ registration.event?.name }}
           </div>
-          <div v-if="registration.payment_status === 'paid'">
+          <div v-if="isPaid(registration)">
             <strong>Status:</strong> <span class="text-green-600 font-semibold">Pago</span>
           </div>
         </div>
@@ -76,14 +76,30 @@ const router = useRouter()
 const registrations = ref([])
 const qrCanvases = ref([])
 
+// Função auxiliar para verificar se uma inscrição está paga
+function isPaid(registration) {
+  // Verificar payment_status direto
+  if (registration.payment_status === 'paid') {
+    return true
+  }
+  
+  // Verificar gateway_payload.status como fallback (para cartão de crédito confirmado)
+  const gatewayStatus = registration.gateway_payload?.status
+  if (gatewayStatus === 'CONFIRMED' || gatewayStatus === 'RECEIVED') {
+    return true
+  }
+  
+  return false
+}
+
 // Filtrar apenas inscrições pagas
 const paidRegistrations = computed(() => {
-  return registrations.value.filter(reg => reg.payment_status === 'paid')
+  return registrations.value.filter(reg => isPaid(reg))
 })
 
 // Inscrições pendentes
 const pendingRegistrations = computed(() => {
-  return registrations.value.filter(reg => reg.payment_status !== 'paid')
+  return registrations.value.filter(reg => !isPaid(reg))
 })
 
 onMounted(async () => {
