@@ -92,6 +92,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/registrations/qr/{qrCode}', [RegistrationController::class, 'getByQrCode']);
     Route::get('/registrations/phone/{phone}', [RegistrationController::class, 'getByPhone']);
     Route::get('/registrations/by-cpf/{cpf}', [RegistrationController::class, 'getByCpf']);
+    Route::get('/registrations/by-payment/{paymentId}', [RegistrationController::class, 'getByPaymentId']);
 
     // Validação de QR Code
     Route::post('/validate/qrcode', [QRCodeValidationController::class, 'validateByQrCode']);

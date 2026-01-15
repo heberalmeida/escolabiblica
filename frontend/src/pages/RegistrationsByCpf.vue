@@ -93,7 +93,7 @@
                 </div>
               </div>
               <div v-if="reg.payment_status === 'paid' && reg.qr_code" class="space-y-2">
-                <div class="bg-white p-4 rounded-lg border-2 border-blue-600 flex justify-center">
+                <div v-if="hasQrCode(reg.id)" class="bg-white p-4 rounded-lg border-2 border-blue-600 flex justify-center">
                   <div :id="`qr-${reg.id}`" class="w-full flex justify-center"></div>
                 </div>
                 <button @click="printRegistration(reg)"
@@ -137,6 +137,7 @@ import { FontAwesomeIcon } from '@/plugins/fontawesome'
 import QRCode from 'qrcode'
 import Pagination from '@/components/Pagination.vue'
 import { vMaska } from 'maska/vue'
+import { db, ref as dbRef, onValue } from '@/firebase'
 
 function useSessionStorage(key, initialValue = null) {
   const stored = localStorage.getItem(key)
@@ -159,11 +160,13 @@ const error = ref(null)
 const currentPage = ref(1)
 const lastPage = ref(1)
 const { data: savedCpf, set: setCpfSession, clear: clearCpfSession } = useSessionStorage('user_cpf_registrations', '')
+const unsubscribeFns = ref([])
+let lastUpdateToken = null
 
 onMounted(() => {
   if (savedCpf.value) {
     cpf.value = savedCpf.value
-    search(true)
+    search(true, 1)
   }
 })
 
@@ -189,6 +192,11 @@ async function search(setupListeners = false, page = 1) {
     lastPage.value = data.last_page || 1
     setCpfSession(cpf.value)
     
+    // Configurar listeners do Firebase
+    if (setupListeners || savedCpf.value) {
+      bindRealtimeUpdates(cleanCpf)
+    }
+    
     // Aguardar próximo tick do Vue para garantir que o DOM foi atualizado
     await new Promise(resolve => setTimeout(resolve, 100))
     await generateQRCodes()
@@ -200,6 +208,43 @@ async function search(setupListeners = false, page = 1) {
     }
   } finally {
     loading.value = false
+  }
+}
+
+function bindRealtimeUpdates(cleanCpf) {
+  // Limpar listeners anteriores
+  unsubscribeFns.value.forEach(fn => fn && fn())
+  unsubscribeFns.value = []
+  
+  // Escutar atualizações por telefone (se tivermos registrations)
+  if (registrations.value.length > 0) {
+    const phones = [...new Set(registrations.value.map(r => r.phone).filter(Boolean))]
+    
+    phones.forEach(phone => {
+      const cleanPhone = phone.replace(/\D/g, '')
+      const prefix = import.meta.env.VITE_FIREBASE_COLLECTION_PREFIX || ''
+      const updatesRef = dbRef(db, `updates/${prefix}registrations_by_phone_${cleanPhone}`)
+      
+      let isFirstSnapshot = true
+      const unsubscribe = onValue(updatesRef, async (snapshot) => {
+        if (!snapshot.exists()) return
+        
+        if (isFirstSnapshot) {
+          isFirstSnapshot = false
+          return
+        }
+        
+        const payload = snapshot.val()
+        const token = payload.last_updated || payload.updated_at || JSON.stringify(payload)
+        if (token && token === lastUpdateToken) return
+        lastUpdateToken = token
+        
+        // Recarregar registrations quando houver atualização
+        await search(false, currentPage.value)
+      })
+      
+      unsubscribeFns.value.push(unsubscribe)
+    })
   }
 }
 
@@ -229,6 +274,8 @@ async function generateQRCodes() {
             errorCorrectionLevel: 'M'
           })
           
+          // Marcar como gerado apenas após sucesso
+          qrCodeGenerated.value.add(reg.id)
           console.log(`QR Code gerado para registro ${reg.id}`)
         } else {
           console.warn(`Container não encontrado: ${containerId} para registro ${reg.id}, payment_status: ${reg.payment_status}, qr_code: ${reg.qr_code ? 'existe' : 'não existe'}`)
@@ -243,6 +290,12 @@ async function generateQRCodes() {
 const paidRegistrations = computed(() => {
   return registrations.value.filter(reg => reg.payment_status === 'paid')
 })
+
+const qrCodeGenerated = ref(new Set())
+
+function hasQrCode(regId) {
+  return qrCodeGenerated.value.has(regId)
+}
 
 async function printRegistration(registration) {
   // Gerar QR code como imagem base64 antes de abrir a janela
@@ -431,7 +484,10 @@ function logout() {
   registrations.value = []
   error.value = null
   clearCpfSession()
-  qrCanvases.value = {}
+  unsubscribeFns.value.forEach(fn => fn && fn())
+  unsubscribeFns.value = []
+  lastUpdateToken = null
+  qrCodeGenerated.value.clear()
 }
 
 function statusLabel(status) {
@@ -491,6 +547,7 @@ function formatPaymentMethod(method) {
 }
 
 onBeforeUnmount(() => {
-  // Cleanup se necessário
+  unsubscribeFns.value.forEach(fn => fn && fn())
+  unsubscribeFns.value = []
 })
 </script>

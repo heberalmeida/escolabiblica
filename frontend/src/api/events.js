@@ -15,6 +15,7 @@ export const registrationsApi = {
   getByQrCode: (qrCode) => http.get(`/registrations/qr/${qrCode}`),
   getByPhone: (phone) => http.get(`/registrations/phone/${phone}`),
   getByCpf: (cpf, params = {}) => http.get(`/registrations/by-cpf/${cpf}`, { params }),
+  getByPaymentId: (paymentId) => http.get(`/registrations/by-payment/${paymentId}`),
   markAsPaid: (id) => http.put(`/admin/registrations/${id}/mark-as-paid`),
 }
 

@@ -15,6 +15,7 @@ class RegistrationController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $eventId = $request->input('event_id');
+        $groupByPayment = $request->input('group_by_payment', true); // Agrupar por pagamento por padrão
 
         $query = Registration::with('event');
 
@@ -22,10 +23,144 @@ class RegistrationController extends Controller
             $query->where('event_id', $eventId);
         }
 
-        $registrations = $query->orderByDesc('created_at')
-            ->paginate($perPage);
+        // Se não agrupar por pagamento, retornar lista simples
+        if (!$groupByPayment) {
+            $registrations = $query->orderByDesc('created_at')
+                ->paginate($perPage);
+            return response()->json($registrations, 200);
+        }
 
-        return response()->json($registrations, 200);
+        // Agrupar por pagamento (asaas_payment_id ou created_at para gratuitas)
+        $allRegistrations = $query->orderByDesc('created_at')->get();
+
+        // Agrupar registrations por payment_id ou por data de criação (para gratuitas)
+        $grouped = [];
+        foreach ($allRegistrations as $registration) {
+            // Usar payment_id como chave, ou criar chave baseada em data para gratuitas
+            $groupKey = $registration->asaas_payment_id 
+                ? 'payment_' . $registration->asaas_payment_id 
+                : 'free_' . $registration->created_at->format('Y-m-d_H-i-s') . '_' . $registration->id;
+
+            if (!isset($grouped[$groupKey])) {
+                $grouped[$groupKey] = [
+                    'payment_id' => $registration->asaas_payment_id,
+                    'payment_method' => $registration->payment_method,
+                    'payment_status' => $registration->payment_status,
+                    'created_at' => $registration->created_at,
+                    'updated_at' => $registration->updated_at,
+                    'gateway_payload' => $registration->gateway_payload,
+                    'total_amount' => 0, // em centavos
+                    'registrations' => [],
+                ];
+            }
+
+            $grouped[$groupKey]['total_amount'] += $registration->price_paid;
+            $grouped[$groupKey]['registrations'][] = $registration;
+            
+            // Atualizar created_at e updated_at para o mais antigo/mais recente
+            if ($registration->created_at < $grouped[$groupKey]['created_at']) {
+                $grouped[$groupKey]['created_at'] = $registration->created_at;
+            }
+            if ($registration->updated_at > $grouped[$groupKey]['updated_at']) {
+                $grouped[$groupKey]['updated_at'] = $registration->updated_at;
+            }
+        }
+
+        // Converter para array e ordenar por data de criação (mais recente primeiro)
+        $orders = array_values($grouped);
+        usort($orders, function ($a, $b) {
+            return $b['created_at'] <=> $a['created_at'];
+        });
+
+        // Paginar manualmente
+        $page = $request->input('page', 1);
+        $offset = ($page - 1) * $perPage;
+        $paginatedOrders = array_slice($orders, $offset, $perPage);
+        $total = count($orders);
+
+        // Formatar resposta
+        $formattedOrders = array_map(function ($order) {
+            // Extrair informações do comprador do gateway_payload ou da primeira registration
+            $buyerInfo = null;
+            if ($order['gateway_payload']) {
+                $payload = is_array($order['gateway_payload']) 
+                    ? $order['gateway_payload'] 
+                    : json_decode($order['gateway_payload'], true);
+                
+                if (isset($payload['customer'])) {
+                    $buyerInfo = [
+                        'name' => $payload['customer']['name'] ?? null,
+                        'cpf' => $payload['customer']['cpfCnpj'] ?? $payload['customer']['cpf'] ?? null,
+                        'email' => $payload['customer']['email'] ?? null,
+                        'phone' => $payload['customer']['phone'] ?? null,
+                    ];
+                }
+            }
+            
+            // Se não encontrou no payload, usar dados da primeira registration
+            if (!$buyerInfo && !empty($order['registrations'])) {
+                $firstReg = $order['registrations'][0];
+                $buyerInfo = [
+                    'name' => $firstReg->name,
+                    'cpf' => $firstReg->cpf,
+                    'phone' => $firstReg->phone,
+                ];
+            }
+
+            return [
+                'id' => $order['payment_id'] ?? 'free_' . $order['created_at']->format('YmdHis'),
+                'payment_id' => $order['payment_id'],
+                'payment_method' => $order['payment_method'],
+                'payment_status' => $order['payment_status'],
+                'total_amount' => $order['total_amount'], // em centavos
+                'total_amount_formatted' => number_format($order['total_amount'] / 100, 2, ',', '.'), // formato brasileiro
+                'buyer' => $buyerInfo,
+                'created_at' => $order['created_at']->toIso8601String(),
+                'updated_at' => $order['updated_at']->toIso8601String(),
+                'gateway_payload' => $order['gateway_payload'],
+                'registrations_count' => count($order['registrations']),
+                'registrations' => collect($order['registrations'])->map(function ($reg) {
+                    return [
+                        'id' => $reg->id,
+                        'registration_number' => $reg->registration_number,
+                        'qr_code' => $reg->qr_code,
+                        'name' => $reg->name,
+                        'phone' => $reg->phone,
+                        'cpf' => $reg->cpf,
+                        'birth_date' => $reg->birth_date?->format('Y-m-d'),
+                        'sector' => $reg->sector,
+                        'congregation' => $reg->congregation,
+                        'church_type' => $reg->church_type,
+                        'gender' => $reg->gender,
+                        'price_paid' => $reg->price_paid, // em centavos
+                        'price_paid_formatted' => number_format($reg->price_paid / 100, 2, ',', '.'), // formato brasileiro
+                        'payment_status' => $reg->payment_status,
+                        'validated' => $reg->validated,
+                        'validated_at' => $reg->validated_at?->toIso8601String(),
+                        'validated_by' => $reg->validated_by,
+                        'event' => $reg->event ? [
+                            'id' => $reg->event->id,
+                            'name' => $reg->event->name,
+                            'description' => $reg->event->description,
+                            'start_date' => $reg->event->start_date?->format('Y-m-d'),
+                            'end_date' => $reg->event->end_date?->format('Y-m-d'),
+                            'price' => $reg->event->price,
+                            'image' => $reg->event->image,
+                        ] : null,
+                        'created_at' => $reg->created_at->toIso8601String(),
+                        'updated_at' => $reg->updated_at->toIso8601String(),
+                    ];
+                })->values(),
+            ];
+        }, $paginatedOrders);
+
+        return response()->json([
+            'data' => $formattedOrders,
+            'current_page' => (int) $page,
+            'per_page' => (int) $perPage,
+            'total' => $total,
+            'last_page' => (int) ceil($total / $perPage),
+        ], 200);
     }
 
     public function store(Request $request, AsaasService $asaas)
@@ -285,6 +420,7 @@ class RegistrationController extends Controller
                 'message' => 'Inscrições criadas com sucesso.',
                 'registrations' => $registrations,
                 'payment' => [
+                    'id' => $charge['id'] ?? null,
                     'method' => $data['payment_method'],
                     'amount' => $totalAmount / 100,
                     'pix' => [
@@ -342,6 +478,39 @@ class RegistrationController extends Controller
         }
 
         return response()->json($registrations, 200);
+    }
+
+    public function getByPaymentId(string $paymentId)
+    {
+        $registrations = Registration::with('event')
+            ->where('asaas_payment_id', $paymentId)
+            ->orderBy('created_at')
+            ->get();
+
+        if ($registrations->isEmpty()) {
+            return response()->json([
+                'message' => 'Nenhuma inscrição encontrada para este pagamento.'
+            ], 404);
+        }
+
+        // Agrupar informações do pagamento
+        $firstReg = $registrations->first();
+        $totalAmount = $registrations->sum('price_paid');
+        
+        $paymentInfo = [
+            'payment_id' => $paymentId,
+            'payment_method' => $firstReg->payment_method,
+            'payment_status' => $firstReg->payment_status,
+            'total_amount' => $totalAmount,
+            'total_amount_formatted' => number_format($totalAmount / 100, 2, ',', '.'),
+            'gateway_payload' => $firstReg->gateway_payload,
+            'created_at' => $firstReg->created_at->toIso8601String(),
+            'updated_at' => $registrations->max('updated_at')->toIso8601String(),
+            'registrations_count' => $registrations->count(),
+            'registrations' => $registrations,
+        ];
+
+        return response()->json($paymentInfo, 200);
     }
 
     public function markAsPaid($id)
