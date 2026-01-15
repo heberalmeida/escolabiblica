@@ -74,11 +74,6 @@
                     title="Marcar como Pago">
                     <font-awesome-icon :icon="['fas', 'check']" />
                   </button>
-                  <router-link :to="`/admin/registrations/${registration.id}`"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition"
-                    title="Ver Detalhes">
-                    <font-awesome-icon :icon="['fas', 'eye']" />
-                  </router-link>
                 </div>
               </td>
             </tr>
@@ -151,6 +146,7 @@ async function loadRegistrations(page = 1) {
     const params = {
       per_page: 15,
       page,
+      group_by_payment: false, // Não agrupar para admin, mostrar todas as inscrições
     }
     
     if (selectedEventId.value) {
@@ -161,10 +157,48 @@ async function loadRegistrations(page = 1) {
     
     if (response.data) {
       if (Array.isArray(response.data)) {
-        allRegistrations.value = response.data
+        // Se os dados vêm agrupados por pagamento, extrair todas as inscrições
+        const flatRegistrations = []
+        response.data.forEach(item => {
+          if (item.registrations && Array.isArray(item.registrations)) {
+            // Adicionar informações do pagamento a cada inscrição
+            item.registrations.forEach(reg => {
+              flatRegistrations.push({
+                ...reg,
+                payment_id: item.payment_id || item.id,
+                payment_method: item.payment_method,
+                payment_status_group: item.payment_status,
+                total_amount: item.total_amount,
+              })
+            })
+          } else {
+            // Se já é uma inscrição individual, adicionar diretamente
+            flatRegistrations.push(item)
+          }
+        })
+        allRegistrations.value = flatRegistrations
         pagination.value = null
       } else if (response.data.data) {
-        allRegistrations.value = response.data.data
+        // Se os dados vêm agrupados por pagamento, extrair todas as inscrições
+        const flatRegistrations = []
+        response.data.data.forEach(item => {
+          if (item.registrations && Array.isArray(item.registrations)) {
+            // Adicionar informações do pagamento a cada inscrição
+            item.registrations.forEach(reg => {
+              flatRegistrations.push({
+                ...reg,
+                payment_id: item.payment_id || item.id,
+                payment_method: item.payment_method,
+                payment_status_group: item.payment_status,
+                total_amount: item.total_amount,
+              })
+            })
+          } else {
+            // Se já é uma inscrição individual, adicionar diretamente
+            flatRegistrations.push(item)
+          }
+        })
+        allRegistrations.value = flatRegistrations
         pagination.value = {
           current_page: response.data.current_page,
           last_page: response.data.last_page,

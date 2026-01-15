@@ -15,7 +15,8 @@ class RegistrationController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $eventId = $request->input('event_id');
-        $groupByPayment = $request->input('group_by_payment', true); // Agrupar por pagamento por padrão
+        // Converter string "false" para boolean false
+        $groupByPayment = filter_var($request->input('group_by_payment', true), FILTER_VALIDATE_BOOLEAN);
 
         $query = Registration::with('event');
 
@@ -577,7 +578,18 @@ class RegistrationController extends Controller
     {
         $registration = Registration::with('event')
             ->where('qr_code', $qrCode)
-            ->firstOrFail();
+            // Filtrar apenas inscrições pagas
+            ->where(function($q) {
+                $q->where('payment_status', 'paid')
+                  ->orWhereRaw("JSON_EXTRACT(gateway_payload, '$.status') IN ('CONFIRMED', 'RECEIVED')");
+            })
+            ->first();
+
+        if (!$registration) {
+            return response()->json([
+                'message' => 'Inscrição paga não encontrada.',
+            ], 404);
+        }
 
         return response()->json($registration, 200);
     }

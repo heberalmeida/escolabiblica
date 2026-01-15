@@ -100,6 +100,11 @@ Route::prefix('v1')->group(function () {
     Route::post('/validate/qrcode', [QRCodeValidationController::class, 'validateByQrCode']);
     Route::post('/validate/name', [QRCodeValidationController::class, 'validateByName']);
     Route::post('/validate/phone', [QRCodeValidationController::class, 'validateByPhone']);
+    Route::post('/validate/registration-number', [QRCodeValidationController::class, 'validateByRegistrationNumber']);
+    
+    // Busca de inscrições (não valida)
+    Route::post('/validate/search/name', [QRCodeValidationController::class, 'searchByName']);
+    Route::post('/validate/search/phone', [QRCodeValidationController::class, 'searchByPhone']);
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
         Route::apiResource('/admin/events', EventController::class);

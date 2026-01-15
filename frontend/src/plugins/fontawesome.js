@@ -41,6 +41,20 @@ import {
   faPrint,
   faClock,
   faTicketAlt,
+  faFileLines,
+  faUsers,
+  faCheckDouble,
+  faChartPie,
+  faMapMarkerAlt,
+  faInbox,
+  faVenusMars,
+  faUserTag,
+  faCity,
+  faChartLine,
+  faMapMarkedAlt,
+  faMars,
+  faVenus,
+  faBuilding,
   } from '@fortawesome/free-solid-svg-icons'
 
 import { faPix } from '@fortawesome/free-brands-svg-icons'
@@ -87,6 +101,20 @@ library.add(
   faPrint,
   faClock,
   faTicketAlt,
+  faFileLines,
+  faUsers,
+  faCheckDouble,
+  faChartPie,
+  faMapMarkerAlt,
+  faInbox,
+  faVenusMars,
+  faUserTag,
+  faCity,
+  faChartLine,
+  faMapMarkedAlt,
+  faMars,
+  faVenus,
+  faBuilding,
 )
 
 export { FontAwesomeIcon }

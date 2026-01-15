@@ -24,6 +24,9 @@ export const validationApi = {
   validateByQrCode: (qrCode) => http.post('/validate/qrcode', { qr_code: qrCode }),
   validateByName: (name, eventId) => http.post('/validate/name', { name, event_id: eventId }),
   validateByPhone: (phone, eventId) => http.post('/validate/phone', { phone, event_id: eventId }),
+  validateByRegistrationNumber: (registrationNumber) => http.post('/validate/registration-number', { registration_number: registrationNumber }),
+  searchByName: (name, eventId) => http.post('/validate/search/name', { name, event_id: eventId }),
+  searchByPhone: (phone, eventId) => http.post('/validate/search/phone', { phone, event_id: eventId }),
 }
 
 export const churchesApi = {

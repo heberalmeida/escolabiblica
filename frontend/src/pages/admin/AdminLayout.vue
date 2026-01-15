@@ -16,20 +16,6 @@
             Dashboard
           </router-link>
 
-          <router-link to="/admin/orders"
-            class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-green-50"
-            :class="{ 'bg-green-100 text-green-700 font-semibold': $route.name === 'admin-orders' }">
-            <font-awesome-icon :icon="['fas', 'shopping-cart']" />
-            Pedidos
-          </router-link>
-
-          <router-link to="/admin/products"
-            class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-green-50"
-            :class="{ 'bg-green-100 text-green-700 font-semibold': $route.name === 'admin-products' }">
-            <font-awesome-icon :icon="['fas', 'box']" />
-            Produtos
-          </router-link>
-
           <router-link to="/admin/events"
             class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-blue-50"
             :class="{ 'bg-blue-100 text-blue-700 font-semibold': $route.name?.startsWith('admin-event') }">
@@ -116,22 +102,6 @@
                 Dashboard
               </router-link>
 
-              <router-link to="/admin/orders"
-                class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-green-50"
-                :class="{ 'bg-green-100 text-green-700 font-semibold': $route.name === 'admin-orders' }"
-                @click="sidebarOpen = false">
-                <font-awesome-icon :icon="['fas', 'shopping-cart']" />
-                Pedidos
-              </router-link>
-
-              <router-link to="/admin/products"
-                class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-green-50"
-                :class="{ 'bg-green-100 text-green-700 font-semibold': $route.name === 'admin-products' }"
-                @click="sidebarOpen = false">
-                <font-awesome-icon :icon="['fas', 'box']" />
-                Produtos
-              </router-link>
-
               <router-link to="/admin/events"
                 class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-blue-50"
                 :class="{ 'bg-blue-100 text-blue-700 font-semibold': $route.name?.startsWith('admin-event') }"
@@ -193,8 +163,6 @@ const userInitial = computed(() => {
 const currentTitle = computed(() => {
   switch (route.name) {
     case 'admin-dashboard': return 'Dashboard'
-    case 'admin-orders': return 'Pedidos'
-    case 'admin-products': return 'Produtos'
     case 'admin-events': return 'Eventos'
     case 'admin-event-new': return 'Novo Evento'
     case 'admin-event-form': return 'Editar Evento'
