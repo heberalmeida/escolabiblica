@@ -23,6 +23,13 @@
             Eventos
           </router-link>
 
+          <router-link to="/admin/orders"
+            class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-blue-50"
+            :class="{ 'bg-blue-100 text-blue-700 font-semibold': $route.name === 'admin-orders' }">
+            <font-awesome-icon :icon="['fas', 'shopping-cart']" />
+            Pedidos
+          </router-link>
+
           <router-link to="/admin/registrations"
             class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-blue-50"
             :class="{ 'bg-blue-100 text-blue-700 font-semibold': $route.name === 'admin-registrations' }">
@@ -110,6 +117,14 @@
                 Eventos
               </router-link>
 
+              <router-link to="/admin/orders"
+                class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-blue-50"
+                :class="{ 'bg-blue-100 text-blue-700 font-semibold': $route.name === 'admin-orders' }"
+                @click="sidebarOpen = false">
+                <font-awesome-icon :icon="['fas', 'shopping-cart']" />
+                Pedidos
+              </router-link>
+
               <router-link to="/admin/registrations"
                 class="flex items-center gap-2 px-4 py-2 rounded-lg transition hover:bg-blue-50"
                 :class="{ 'bg-blue-100 text-blue-700 font-semibold': $route.name === 'admin-registrations' }"
@@ -166,6 +181,7 @@ const currentTitle = computed(() => {
     case 'admin-events': return 'Eventos'
     case 'admin-event-new': return 'Novo Evento'
     case 'admin-event-form': return 'Editar Evento'
+    case 'admin-orders': return 'Pedidos'
     case 'admin-registrations': return 'Inscrições'
     case 'admin-validate': return 'Validar Inscrições'
     default: return ''

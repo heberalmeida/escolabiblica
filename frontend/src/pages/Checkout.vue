@@ -40,7 +40,7 @@
           </li>
         </ul>
 
-        <Form :validation-schema="schema" @submit="onSubmit" v-slot="{ errors, values, setFieldValue, validate, meta, setErrors, setTouched }" :initial-values="getInitialValues()" :validate-on-mount="false" :validate-on-blur="true" :validate-on-change="true" :validate-on-input="false">
+        <Form :validation-schema="schema" @submit="onSubmit" v-slot="{ errors, values, setFieldValue, validate, meta, setErrors, setTouched, handleSubmit: formHandleSubmit }" :initial-values="getInitialValues()" :validate-on-mount="false" :validate-on-blur="false" :validate-on-change="false">
           <!-- Informação sobre Eventos -->
           <div v-if="cart.eventItems.length > 0" class="mb-6">
             <div v-for="(eventItem, eventIndex) in cart.eventItems" :key="eventItem.eventId" class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -63,53 +63,53 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                 <label class="block text-sm font-medium mb-1">Nome completo *</label>
-                <Field name="name" v-slot="{ field }">
+                <Field name="name" v-slot="{ field, meta }">
                   <input v-bind="field"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="errors.name ? 'border-red-600' : 'border-gray-300'" />
+                     />
                 </Field>
                 <ErrorMessage name="name" class="text-red-600 text-xs mt-1" />
               </div>
 
               <div>
                 <label class="block text-sm font-medium mb-1">CPF *</label>
-                <Field name="cpf" v-slot="{ field }">
+                <Field name="cpf" v-slot="{ field, meta }">
                   <input v-bind="field" v-maska="'###.###.###-##'"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="errors.cpf ? 'border-red-600' : 'border-gray-300'" />
+                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
                 <ErrorMessage name="cpf" class="text-red-600 text-xs mt-1" />
               </div>
 
               <div>
                 <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
-                <Field name="birth_date" v-slot="{ field }">
+                <Field name="birth_date" v-slot="{ field, meta }">
                   <input
                     v-bind="field"
                     v-maska="'##/##/####'"
                     placeholder="DD/MM/AAAA"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="errors.birth_date ? 'border-red-600' : 'border-gray-300'" />
+                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
                 <ErrorMessage name="birth_date" class="text-red-600 text-xs mt-1" />
               </div>
 
               <div>
                 <label class="block text-sm font-medium mb-1">Telefone *</label>
-                <Field name="phone" v-slot="{ field }">
+                <Field name="phone" v-slot="{ field, meta }">
                   <input v-bind="field" v-maska="'(##) #####-####'"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="errors.phone ? 'border-red-600' : 'border-gray-300'" />
+                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
                 <ErrorMessage name="phone" class="text-red-600 text-xs mt-1" />
               </div>
 
               <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                 <label class="block text-sm font-medium mb-1">Email *</label>
-                <Field name="email" v-slot="{ field }">
+                <Field name="email" v-slot="{ field, meta }">
                   <input type="email" v-bind="field"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="errors.email ? 'border-red-600' : 'border-gray-300'" />
+                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
                 <ErrorMessage name="email" class="text-red-600 text-xs mt-1" />
               </div>
@@ -120,7 +120,7 @@
                   <div class="border-t pt-6 mt-6">
                     <h4 class="text-lg font-semibold text-gray-800 mb-4">{{ eventItem.name }} - Dados dos Ingressos</h4>
                     <p class="text-xs text-gray-600 mb-4">Preencha os dados de cada ingresso. Nome e telefone devem ser únicos.</p>
-                    
+
                     <div v-for="(reg, regIndex) in getEventRegistrations(eventIndex)" :key="regIndex" class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                       <div class="mb-3">
                         <div v-if="regIndex === 0" class="mb-2">
@@ -146,145 +146,134 @@
                       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="col-span-1 sm:col-span-2">
                           <label class="block text-sm font-medium mb-1">Nome completo *</label>
-                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.name`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].name`" v-slot="{ field, meta }">
                             <input
                               v-bind="field"
-                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.name`] ? 'border-red-600' : 'border-gray-300'" />
+                              class="w-full border px-3 py-2 rounded-lg transition"
+                               :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                           </Field>
-                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.name`" class="text-red-600 text-xs mt-1" />
+                          <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].name`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <div>
                           <label class="block text-sm font-medium mb-1">Telefone *</label>
-                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.phone`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].phone`" v-slot="{ field, meta }">
                             <input
                               v-bind="field"
                               v-maska="'(##) #####-####'"
                               class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.phone`] ? 'border-red-600' : 'border-gray-300'" />
+                              :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                           </Field>
-                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.phone`" class="text-red-600 text-xs mt-1" />
+                          <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].phone`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <div>
                           <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
-                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.birth_date`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].birth_date`" v-slot="{ field, meta }">
                             <input
                               v-bind="field"
                               v-maska="'##/##/####'"
                               placeholder="DD/MM/AAAA"
                               class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.birth_date`] ? 'border-red-600' : 'border-gray-300'" />
+                              :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                           </Field>
-                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.birth_date`" class="text-red-600 text-xs mt-1" />
+                          <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].birth_date`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <div>
                           <label class="block text-sm font-medium mb-1">Gênero *</label>
                           <div class="flex gap-4">
                             <label class="flex items-center gap-2 cursor-pointer">
-                              <Field :name="`events.${eventIndex}.registrations.${regIndex}.gender`" type="radio" value="MASCULINO" v-slot="{ field }">
+                              <Field :name="`events[${eventIndex}].registrations[${regIndex}].gender`" type="radio" value="MASCULINO" v-slot="{ field }">
                                 <input type="radio" v-bind="field" />
                               </Field>
                               <span class="text-sm">Masculino</span>
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
-                              <Field :name="`events.${eventIndex}.registrations.${regIndex}.gender`" type="radio" value="FEMININO" v-slot="{ field }">
+                              <Field :name="`events[${eventIndex}].registrations[${regIndex}].gender`" type="radio" value="FEMININO" v-slot="{ field }">
                                 <input type="radio" v-bind="field" />
                               </Field>
                               <span class="text-sm">Feminino</span>
                             </label>
                           </div>
-                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.gender`" class="text-red-600 text-xs mt-1" />
+                          <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].gender`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                           <label class="block text-sm font-medium mb-1">Afiliação *</label>
-                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.church_affiliation`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_affiliation`" v-slot="{ field, meta }">
                             <select
                               v-bind="field"
-                              @change="(e) => { 
-                                field.onChange(e); 
-                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.sector`, ''); 
-                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.congregation`, ''); 
-                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.church_type`, ''); 
-                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.position`, ''); 
-                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.other_church_name`, '');
-                                // Forçar validação dos campos dependentes
-                                setTimeout(() => {
-                                  validate(`events.${eventIndex}.registrations.${regIndex}.sector`);
-                                  validate(`events.${eventIndex}.registrations.${regIndex}.congregation`);
-                                  validate(`events.${eventIndex}.registrations.${regIndex}.church_type`);
-                                  validate(`events.${eventIndex}.registrations.${regIndex}.position`);
-                                  validate(`events.${eventIndex}.registrations.${regIndex}.other_church_name`);
-                                }, 100);
+                              @change="(e) => {
+                                field.onChange(e);
+                                setFieldValue(`events[${eventIndex}].registrations[${regIndex}].sector`, '');
+                                setFieldValue(`events[${eventIndex}].registrations[${regIndex}].congregation`, '');
+                                setFieldValue(`events[${eventIndex}].registrations[${regIndex}].church_type`, '');
+                                setFieldValue(`events[${eventIndex}].registrations[${regIndex}].position`, '');
+                                setFieldValue(`events[${eventIndex}].registrations[${regIndex}].other_church_name`, '');
                               }"
                               @blur="field.onBlur"
                               class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.church_affiliation`] ? 'border-red-600' : 'border-gray-300'">
+                              :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
                               <option value="">Selecione</option>
                               <option value="ASSEMBLEIA">Assembleia de Deus Missões de Campo Grande</option>
                               <option value="OUTRA_IGREJA">De outra igreja</option>
                               <option value="NAO_EVANGELICO">Não evangélico</option>
                             </select>
                           </Field>
-                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.church_affiliation`" class="text-red-600 text-xs mt-1" />
+                          <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].church_affiliation`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <!-- Campos condicionais para Assembleia -->
                         <template v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_affiliation === 'ASSEMBLEIA'">
                           <div>
                             <label class="block text-sm font-medium mb-1">Setor *</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.sector`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].sector`" v-slot="{ field, meta }">
                               <select
                                 v-bind="field"
-                                @change="(e) => { field.onChange(e); setFieldValue(`events.${eventIndex}.registrations.${regIndex}.congregation`, '') }"
+                                @change="(e) => { field.onChange(e); setFieldValue(`events[${eventIndex}].registrations[${regIndex}].congregation`, '') }"
                                 @blur="field.onBlur"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.sector`] ? 'border-red-600' : 'border-gray-300'">
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
                                 <option value="">Selecione</option>
                                 <option v-for="sector in eventSectors" :key="sector.value" :value="sector.value">
                                   {{ sector.name }}
                                 </option>
                               </select>
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.sector`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].sector`" class="text-red-600 text-xs mt-1" />
                           </div>
 
                           <div>
                             <label class="block text-sm font-medium mb-1">Congregação *</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.congregation`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].congregation`" v-slot="{ field, meta }">
                               <select
                                 v-bind="field"
                                 @change="field.onChange"
                                 @blur="field.onBlur"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.congregation`] ? 'border-red-600' : 'border-gray-300'">
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
                                 <option value="">Selecione</option>
                                 <option v-for="church in getChurchesBySector(values.events?.[eventIndex]?.registrations?.[regIndex]?.sector)" :key="church.id || church.nome" :value="church.nome">
                                   {{ church.nome }}
                                 </option>
                               </select>
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.congregation`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].congregation`" class="text-red-600 text-xs mt-1" />
                           </div>
 
                           <div>
                             <label class="block text-sm font-medium mb-1">Tipo *</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" v-slot="{ field, meta }">
                               <select
                                 v-bind="field"
-                                @change="(e) => { 
+                                @change="(e) => {
                                   field.onChange(e);
-                                  setFieldValue(`events.${eventIndex}.registrations.${regIndex}.position`, '');
-                                  setTimeout(() => {
-                                    validate(`events.${eventIndex}.registrations.${regIndex}.position`);
-                                  }, 100);
+                                  setFieldValue(`events[${eventIndex}].registrations[${regIndex}].position`, '');
                                 }"
                                 @blur="field.onBlur"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.church_type`] ? 'border-red-600' : 'border-gray-300'">
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
                                 <option value="">Selecione</option>
                                 <option value="Membro">Membro</option>
                                 <option value="Diácono">Diácono</option>
@@ -298,19 +287,19 @@
                                 <option value="OUTRO">Outro (escrever cargo)</option>
                               </select>
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" class="text-red-600 text-xs mt-1" />
                           </div>
 
                           <div v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_type === 'OUTRO'" class="col-span-1 sm:col-span-2 lg:col-span-4">
                             <label class="block text-sm font-medium mb-1">Cargo *</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.position`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].position`" v-slot="{ field, meta }">
                               <input
                                 v-bind="field"
                                 placeholder="Digite o cargo"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.position`] ? 'border-red-600' : 'border-gray-300'" />
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.position`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].position`" class="text-red-600 text-xs mt-1" />
                           </div>
                         </template>
 
@@ -318,31 +307,28 @@
                         <template v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_affiliation === 'OUTRA_IGREJA'">
                           <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                             <label class="block text-sm font-medium mb-1">Nome da Igreja *</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.other_church_name`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].other_church_name`" v-slot="{ field, meta }">
                               <input
                                 v-bind="field"
                                 placeholder="Digite o nome da igreja"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.other_church_name`] ? 'border-red-600' : 'border-gray-300'" />
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.other_church_name`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].other_church_name`" class="text-red-600 text-xs mt-1" />
                           </div>
 
                           <div>
                             <label class="block text-sm font-medium mb-1">Cargo Ministerial</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" v-slot="{ field }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" v-slot="{ field, meta }">
                               <select
                                 v-bind="field"
-                                @change="(e) => { 
+                                @change="(e) => {
                                   field.onChange(e);
-                                  setFieldValue(`events.${eventIndex}.registrations.${regIndex}.position`, '');
-                                  setTimeout(() => {
-                                    validate(`events.${eventIndex}.registrations.${regIndex}.position`);
-                                  }, 100);
+                                  setFieldValue(`events[${eventIndex}].registrations[${regIndex}].position`, '');
                                 }"
                                 @blur="field.onBlur"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="errors[`events.${eventIndex}.registrations.${regIndex}.church_type`] ? 'border-red-600' : 'border-gray-300'">
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
                                 <option value="">Selecione (opcional)</option>
                                 <option value="Membro">Membro</option>
                                 <option value="Diácono">Diácono</option>
@@ -356,25 +342,25 @@
                                 <option value="OUTRO">Outro (escrever cargo)</option>
                               </select>
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" class="text-red-600 text-xs mt-1" />
                           </div>
 
                           <div v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_type === 'OUTRO'" class="col-span-1 sm:col-span-2 lg:col-span-4">
                             <label class="block text-sm font-medium mb-1">Cargo *</label>
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.position`" v-slot="{ field }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].position`" v-slot="{ field, meta }">
                               <input
                                 v-bind="field"
                                 placeholder="Digite o cargo"
                                 class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="errors[`events.${eventIndex}.registrations.${regIndex}.position`] ? 'border-red-600' : 'border-gray-300'" />
+                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                             </Field>
-                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.position`" class="text-red-600 text-xs mt-1" />
+                            <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].position`" class="text-red-600 text-xs mt-1" />
                           </div>
                         </template>
 
                         <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                           <label class="flex items-center gap-2 cursor-pointer">
-                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.whatsapp_authorization`" type="checkbox" v-slot="{ field }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].whatsapp_authorization`" type="checkbox" v-slot="{ field }">
                               <input type="checkbox" v-bind="field" :checked="field.value === true || field.value === undefined" />
                             </Field>
                             <span class="text-sm">Autoriza receber novidades via WhatsApp</span>
@@ -612,7 +598,8 @@
           <div class="flex flex-col sm:flex-row justify-between gap-2 sm:gap-0 pt-4">
             <router-link to="/cart"
               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-center sm:text-left">Voltar</router-link>
-            <button type="submit"
+            <button type="button"
+              @click="handleSubmit($event, { setTouched, errors, values, formHandleSubmit, validate })"
               class="bg-green-600 cursor-pointer text-white px-6 py-2 rounded hover:bg-green-700 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="loadingPay || (cart.productItems.length > 0 && total < 5)">
               <span v-if="loadingPay"
@@ -721,10 +708,10 @@ const availablePaymentMethods = computed(() => {
     // Se não há eventos, retornar todos os métodos
     return ['PIX', 'BOLETO', 'CREDIT_CARD']
   }
-  
+
   // Se há eventos, verificar métodos ativos de todos os eventos
   const allMethods = new Set()
-  
+
   events.value.forEach(event => {
     if (event.payment_methods) {
       event.payment_methods.forEach(pm => {
@@ -734,17 +721,17 @@ const availablePaymentMethods = computed(() => {
       })
     }
   })
-  
+
   // Se evento é gratuito, adicionar FREE
   const hasFreeEvents = cart.eventItems.some(item => {
     const event = events.value.find(e => e.id === item.eventId)
     return event && event.price === 0
   })
-  
+
   if (hasFreeEvents) {
     allMethods.add('FREE')
   }
-  
+
   return Array.from(allMethods)
 })
 
@@ -818,24 +805,24 @@ function handleCopyBuyerData(checked, eventIndex, setFieldValue, formValues) {
       toastRef.value.open('Preencha primeiro os dados do comprador (nome, telefone e data de nascimento).', 'warning')
       return
     }
-    
-    setFieldValue(`events.${eventIndex}.registrations.0.name`, formValues.name)
-    setFieldValue(`events.${eventIndex}.registrations.0.phone`, formValues.phone)
-    setFieldValue(`events.${eventIndex}.registrations.0.birth_date`, formValues.birth_date)
-    
+
+    setFieldValue(`events[${eventIndex}].registrations[0].name`, formValues.name)
+    setFieldValue(`events[${eventIndex}].registrations[0].phone`, formValues.phone)
+    setFieldValue(`events[${eventIndex}].registrations[0].birth_date`, formValues.birth_date)
+
     toastRef.value.open('Dados do comprador copiados para o primeiro ingresso!', 'success')
   } else {
     // Limpar dados do comprador do primeiro ingresso quando desmarcar
-    setFieldValue(`events.${eventIndex}.registrations.0.name`, '')
-    setFieldValue(`events.${eventIndex}.registrations.0.phone`, '')
-    setFieldValue(`events.${eventIndex}.registrations.0.birth_date`, '')
+    setFieldValue(`events[${eventIndex}].registrations[0].name`, '')
+    setFieldValue(`events[${eventIndex}].registrations[0].phone`, '')
+    setFieldValue(`events[${eventIndex}].registrations[0].birth_date`, '')
   }
 }
 
 function handleCopyChurchData(checked, eventIndex, setFieldValue, formValues) {
   const eventItem = cart.eventItems[eventIndex]
   if (!eventItem || eventItem.quantity <= 1) return
-  
+
   if (checked) {
     // Copiar afiliação, setor e congregação do primeiro ingresso (índice 0) para todos os demais
     const firstReg = formValues?.events?.[eventIndex]?.registrations?.[0]
@@ -843,24 +830,24 @@ function handleCopyChurchData(checked, eventIndex, setFieldValue, formValues) {
       toastRef.value.open('Preencha primeiro a afiliação, setor e congregação no primeiro ingresso.', 'warning')
       return
     }
-    
+
     // Copiar afiliação, setor e congregação (não copiar tipo, position, etc)
     for (let i = 1; i < eventItem.quantity; i++) {
-      setFieldValue(`events.${eventIndex}.registrations.${i}.church_affiliation`, firstReg.church_affiliation || '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.sector`, firstReg.sector || '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.congregation`, firstReg.congregation || '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].church_affiliation`, firstReg.church_affiliation || '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].sector`, firstReg.sector || '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].congregation`, firstReg.congregation || '')
     }
-    
+
     toastRef.value.open('Afiliação, setor e congregação copiados para todos os ingressos!', 'success')
   } else {
     // Limpar afiliação, setor e congregação dos ingressos subsequentes quando desmarcar
     for (let i = 1; i < eventItem.quantity; i++) {
-      setFieldValue(`events.${eventIndex}.registrations.${i}.church_affiliation`, '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.sector`, '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.congregation`, '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.church_type`, '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.position`, '')
-      setFieldValue(`events.${eventIndex}.registrations.${i}.other_church_name`, '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].church_affiliation`, '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].sector`, '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].congregation`, '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].church_type`, '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].position`, '')
+      setFieldValue(`events[${eventIndex}].registrations[${i}].other_church_name`, '')
     }
   }
 }
@@ -1048,7 +1035,7 @@ const installmentOptions = computed(() => {
   const max = 10
   const fix = 49 // R$ 0,49 em centavos
   const options = []
-  
+
   // À vista: R$ 0,49 + 2,99% + (1,70% × 1 mês)
   const vistaPercent = 2.99 + (1.70 * 1) // 2,99% fixo + 1,70% ao mês
   const vistaTotal = total.value + fix + total.value * (vistaPercent / 100)
@@ -1058,13 +1045,13 @@ const installmentOptions = computed(() => {
     total: vistaTotal,
     percent: vistaPercent
   })
-  
+
   // Regras de valor mínimo:
   // 2x: mínimo R$ 60 (6000 centavos)
   // 3x: mínimo R$ 60 (6000 centavos) - seguindo a regra de 2x
   // 4x: mínimo R$ 120 (12000 centavos)
   // 5x até 10x: mínimo R$ 120 (12000 centavos) - seguindo a regra de 4x
-  
+
   for (let n = 2; n <= max; n++) {
     // Verificar valor mínimo baseado no número de parcelas
     let minValue = 0
@@ -1073,7 +1060,7 @@ const installmentOptions = computed(() => {
     } else if (n >= 4) {
       minValue = 12000 // R$ 120 para 4x e acima
     }
-    
+
     // Só adicionar se o valor total atender ao mínimo
     if (total.value >= minValue) {
       let percentFixo = 0
@@ -1084,7 +1071,7 @@ const installmentOptions = computed(() => {
         // 7 à 12 parcelas: R$ 0,49 + 3,99% (fixo) + (1,70% × n meses)
         percentFixo = 3.99
       }
-      
+
       // Taxa total = taxa fixa + (1,70% × número de meses)
       const percent = percentFixo + (1.70 * n)
       const totalComTaxa = total.value + fix + total.value * (percent / 100)
@@ -1092,7 +1079,7 @@ const installmentOptions = computed(() => {
       options.push({ count: n, parcela, total: totalComTaxa, percent })
     }
   }
-  
+
   return options
 })
 
@@ -1300,260 +1287,130 @@ function buildEventPayload(vals) {
   return payload
 }
 
-async function onSubmit(vals, { setErrors, setFieldError, setTouched }) {
-  try {
-    // Primeiro, marcar todos os campos como "touched" para exibir erros
-    // Isso força o vee-validate a mostrar os erros visualmente
-    
-    // Verificar se há eventos pagos (usado em múltiplos lugares)
-    const hasPaidEvents = cart.eventItems.some(e => e.price > 0)
-    
-    // Marcar campos do comprador
-    setTouched('name', true)
-    setTouched('cpf', true)
-    setTouched('birth_date', true)
-    setTouched('phone', true)
-    setTouched('email', true)
-    
-    // Marcar campos de endereço
-    if ((hasPaidEvents && cart.productItems.length === 0) || cart.productItems.length > 0) {
-      setTouched('postalCode', true)
-      setTouched('address', true)
-      setTouched('addressNumber', true)
-      setTouched('province', true)
-      setTouched('city', true)
-      setTouched('state', true)
-    }
-    
-    // Marcar método de pagamento
-    setTouched('method', true)
-    
-    // Marcar campos do cartão se necessário
-    if (vals.method === 'CREDIT_CARD') {
-      setTouched('card.holderName', true)
-      setTouched('card.number', true)
-      setTouched('card.expiryMonth', true)
-      setTouched('card.expiryYear', true)
-      setTouched('card.ccv', true)
-      setTouched('installments', true)
-    }
-    
-    // Marcar campos dos ingressos
-    if (cart.eventItems.length > 0 && vals.events) {
-      vals.events.forEach((event, eventIndex) => {
-        if (event.registrations) {
-          event.registrations.forEach((reg, regIndex) => {
-            setTouched(`events.${eventIndex}.registrations.${regIndex}.name`, true)
-            setTouched(`events.${eventIndex}.registrations.${regIndex}.phone`, true)
-            setTouched(`events.${eventIndex}.registrations.${regIndex}.birth_date`, true)
-            setTouched(`events.${eventIndex}.registrations.${regIndex}.gender`, true)
-            setTouched(`events.${eventIndex}.registrations.${regIndex}.church_affiliation`, true)
-            
-            if (reg.church_affiliation === 'ASSEMBLEIA') {
-              setTouched(`events.${eventIndex}.registrations.${regIndex}.sector`, true)
-              setTouched(`events.${eventIndex}.registrations.${regIndex}.congregation`, true)
-              setTouched(`events.${eventIndex}.registrations.${regIndex}.church_type`, true)
-              if (reg.church_type === 'OUTRO') {
-                setTouched(`events.${eventIndex}.registrations.${regIndex}.position`, true)
-              }
+async function handleSubmit(event, { setTouched, errors, values, formHandleSubmit, validate }) {
+  event.preventDefault()
+
+  // Coletar todos os nomes de campos que precisam ser validados
+  const fieldsToTouch = []
+
+  // Campos do comprador
+  fieldsToTouch.push('name', 'cpf', 'birth_date', 'phone', 'email')
+
+  // Campos de endereço
+  const hasPaidEvents = cart.eventItems.some(e => e.price > 0)
+  if ((hasPaidEvents && cart.productItems.length === 0) || cart.productItems.length > 0) {
+    fieldsToTouch.push('postalCode', 'address', 'addressNumber', 'province', 'city', 'state')
+  }
+
+  // Método de pagamento
+  fieldsToTouch.push('method')
+
+  // Campos do cartão
+  if (values.method === 'CREDIT_CARD') {
+    fieldsToTouch.push('card.holderName', 'card.number', 'card.expiryMonth', 'card.expiryYear', 'card.ccv', 'installments')
+  }
+
+  // Campos dos ingressos
+  if (cart.eventItems.length > 0 && values.events) {
+    values.events.forEach((event, eventIndex) => {
+      if (event.registrations) {
+        event.registrations.forEach((reg, regIndex) => {
+          fieldsToTouch.push(
+            `events[${eventIndex}].registrations[${regIndex}].name`,
+            `events[${eventIndex}].registrations[${regIndex}].phone`,
+            `events[${eventIndex}].registrations[${regIndex}].birth_date`,
+            `events[${eventIndex}].registrations[${regIndex}].gender`,
+            `events[${eventIndex}].registrations[${regIndex}].church_affiliation`
+          )
+
+          if (reg.church_affiliation === 'ASSEMBLEIA') {
+            fieldsToTouch.push(
+              `events[${eventIndex}].registrations[${regIndex}].sector`,
+              `events[${eventIndex}].registrations[${regIndex}].congregation`,
+              `events[${eventIndex}].registrations[${regIndex}].church_type`
+            )
+            if (reg.church_type === 'OUTRO') {
+              fieldsToTouch.push(`events[${eventIndex}].registrations[${regIndex}].position`)
             }
-            
-            if (reg.church_affiliation === 'OUTRA_IGREJA') {
-              setTouched(`events.${eventIndex}.registrations.${regIndex}.other_church_name`, true)
-              if (reg.church_type === 'OUTRO') {
-                setTouched(`events.${eventIndex}.registrations.${regIndex}.position`, true)
-              }
+          }
+
+          if (reg.church_affiliation === 'OUTRA_IGREJA') {
+            fieldsToTouch.push(`events[${eventIndex}].registrations[${regIndex}].other_church_name`)
+            if (reg.church_type === 'OUTRO') {
+              fieldsToTouch.push(`events[${eventIndex}].registrations[${regIndex}].position`)
             }
-          })
-        }
-      })
+          }
+        })
+      }
+    })
+  }
+
+  // Marcar todos os campos como touched ANTES de validar para que os erros apareçam
+  fieldsToTouch.forEach(field => {
+    setTouched(field, true)
+  })
+
+  // Validar todos os campos usando o vee-validate
+  const validationResult = await validate()
+
+  // Aguardar um momento para o vee-validate processar e atualizar os erros
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  // Verificar se há erros
+  const hasErrors = !validationResult.valid
+
+  if (hasErrors) {
+    // Procurar o primeiro campo com erro
+    const errorKeys = Object.keys(errors).filter(key => errors[key])
+    if (errorKeys.length === 0 && validationResult.errors) {
+      errorKeys.push(...Object.keys(validationResult.errors))
     }
-    
-    // Validar todos os campos antes de processar
-    const validationErrors = {}
-    let hasErrors = false
-    
-    // Validar campos do comprador
-    if (!vals.name || !vals.name.trim()) {
-      validationErrors.name = 'Nome completo é obrigatório'
-      hasErrors = true
-    }
-    if (!vals.cpf || !vals.cpf.replace(/\D/g, '')) {
-      validationErrors.cpf = 'CPF é obrigatório'
-      hasErrors = true
-    }
-    if (!vals.birth_date) {
-      validationErrors.birth_date = 'Data de nascimento é obrigatória'
-      hasErrors = true
-    }
-    if (!vals.phone || !vals.phone.replace(/\D/g, '')) {
-      validationErrors.phone = 'Telefone é obrigatório'
-      hasErrors = true
-    }
-    if (!vals.email || !vals.email.trim()) {
-      validationErrors.email = 'Email é obrigatório'
-      hasErrors = true
-    }
-    
-    // Validar endereço se necessário
-    if ((hasPaidEvents && cart.productItems.length === 0) || cart.productItems.length > 0) {
-      if (!vals.postalCode || !vals.postalCode.replace(/\D/g, '')) {
-        validationErrors.postalCode = 'CEP é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.address || !vals.address.trim()) {
-        validationErrors.address = 'Endereço é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.addressNumber || !vals.addressNumber.trim()) {
-        validationErrors.addressNumber = 'Número é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.province || !vals.province.trim()) {
-        validationErrors.province = 'Bairro é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.city || !vals.city.trim()) {
-        validationErrors.city = 'Cidade é obrigatória'
-        hasErrors = true
-      }
-      if (!vals.state || !vals.state.trim()) {
-        validationErrors.state = 'Estado é obrigatório'
-        hasErrors = true
-      }
-    }
-    
-    // Validar método de pagamento
-    if (!vals.method) {
-      validationErrors.method = 'Método de pagamento é obrigatório'
-      hasErrors = true
-    }
-    
-    // Validar cartão de crédito se necessário
-    if (vals.method === 'CREDIT_CARD') {
-      if (!vals.card || !vals.card.holderName || !vals.card.holderName.trim()) {
-        validationErrors['card.holderName'] = 'Nome no cartão é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.card || !vals.card.number || vals.card.number.replace(/\D/g, '').length < 13) {
-        validationErrors['card.number'] = 'Número do cartão é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.card || !vals.card.expiryMonth) {
-        validationErrors['card.expiryMonth'] = 'Mês de validade é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.card || !vals.card.expiryYear) {
-        validationErrors['card.expiryYear'] = 'Ano de validade é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.card || !vals.card.ccv || vals.card.ccv.length !== 3) {
-        validationErrors['card.ccv'] = 'CVV é obrigatório'
-        hasErrors = true
-      }
-      if (!vals.installments) {
-        validationErrors.installments = 'Parcelamento é obrigatório'
-        hasErrors = true
-      }
-    }
-    
-    // Validar registros de eventos
-    if (cart.eventItems.length > 0 && vals.events) {
-      vals.events.forEach((event, eventIndex) => {
-        if (event.registrations) {
-          event.registrations.forEach((reg, regIndex) => {
-            if (!reg.name || !reg.name.trim()) {
-              validationErrors[`events.${eventIndex}.registrations.${regIndex}.name`] = 'Nome completo é obrigatório'
-              hasErrors = true
-            }
-            if (!reg.phone || !reg.phone.replace(/\D/g, '')) {
-              validationErrors[`events.${eventIndex}.registrations.${regIndex}.phone`] = 'Telefone é obrigatório'
-              hasErrors = true
-            }
-            if (!reg.birth_date) {
-              validationErrors[`events.${eventIndex}.registrations.${regIndex}.birth_date`] = 'Data de nascimento é obrigatória'
-              hasErrors = true
-            }
-            if (!reg.gender) {
-              validationErrors[`events.${eventIndex}.registrations.${regIndex}.gender`] = 'Gênero é obrigatório'
-              hasErrors = true
-            }
-            if (!reg.church_affiliation) {
-              validationErrors[`events.${eventIndex}.registrations.${regIndex}.church_affiliation`] = 'Afiliação é obrigatória'
-              hasErrors = true
-            }
-            
-            // Validações condicionais
-            if (reg.church_affiliation === 'ASSEMBLEIA') {
-              if (!reg.sector) {
-                validationErrors[`events.${eventIndex}.registrations.${regIndex}.sector`] = 'Setor é obrigatório para Assembleia'
-                hasErrors = true
-              }
-              if (!reg.congregation) {
-                validationErrors[`events.${eventIndex}.registrations.${regIndex}.congregation`] = 'Congregação é obrigatória para Assembleia'
-                hasErrors = true
-              }
-              if (!reg.church_type) {
-                validationErrors[`events.${eventIndex}.registrations.${regIndex}.church_type`] = 'Tipo é obrigatório para Assembleia'
-                hasErrors = true
-              }
-              if (reg.church_type === 'OUTRO' && (!reg.position || !reg.position.trim())) {
-                validationErrors[`events.${eventIndex}.registrations.${regIndex}.position`] = 'Cargo é obrigatório quando tipo é "Outro"'
-                hasErrors = true
-              }
-            }
-            
-            if (reg.church_affiliation === 'OUTRA_IGREJA') {
-              if (!reg.other_church_name || !reg.other_church_name.trim()) {
-                validationErrors[`events.${eventIndex}.registrations.${regIndex}.other_church_name`] = 'Nome da igreja é obrigatório'
-                hasErrors = true
-              }
-              if (reg.church_type === 'OUTRO' && (!reg.position || !reg.position.trim())) {
-                validationErrors[`events.${eventIndex}.registrations.${regIndex}.position`] = 'Cargo é obrigatório quando tipo é "Outro"'
-                hasErrors = true
-              }
-            }
-          })
-        }
-      })
-    }
-    
-    // Se houver erros, exibir e parar
-    if (hasErrors) {
-      setErrors(validationErrors)
-      loadingPay.value = false
-      
-      // Fazer scroll para o primeiro erro
-      setTimeout(() => {
-        // Procurar por campos com erro (border-red-600 ou ErrorMessage visível)
-        const firstErrorField = document.querySelector('.border-red-600') || 
-                               document.querySelector('[class*="text-red-600"]') ||
-                               document.querySelector('input:invalid') ||
-                               document.querySelector('select:invalid')
-        
+
+    // Fazer scroll para o primeiro erro
+    setTimeout(() => {
+      if (errorKeys.length > 0) {
+        const firstErrorKey = errorKeys[0]
+        const firstErrorField = document.querySelector(`[name="${firstErrorKey}"]`) ||
+                               document.querySelector(`input[name*="${firstErrorKey.split('.').pop()}"]`) ||
+                               document.querySelector(`select[name*="${firstErrorKey.split('.').pop()}"]`) ||
+                               document.querySelector('.border-red-600')
         if (firstErrorField) {
           firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
           if (firstErrorField.focus) {
             firstErrorField.focus()
           }
-        } else {
-          // Se não encontrar campo, fazer scroll para o topo do formulário
-          const formElement = document.querySelector('form') || document.querySelector('[class*="Form"]')
-          if (formElement) {
-            formElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      } else {
+        // Fallback: procurar qualquer campo com erro
+        const errorField = document.querySelector('.border-red-600')
+        if (errorField) {
+          errorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          if (errorField.focus) {
+            errorField.focus()
           }
         }
-      }, 200)
-      
-      toastRef.value.open('Por favor, preencha todos os campos obrigatórios corretamente. Os campos com erro estão destacados em vermelho.', 'error')
-      return
-    }
+      }
+
+      toastRef.value.open('Por favor, preencha todos os campos obrigatórios corretamente.', 'error')
+    }, 100)
+
+    return
+  }
+
+  // Se não houver erros, submeter usando o handleSubmit do vee-validate
+  // Isso vai validar novamente e chamar onSubmit se passar
+  formHandleSubmit()
+}
+
+async function onSubmit(vals) {
+  try {
+    loadingPay.value = true
 
     // Validar nomes e telefones únicos entre todos os ingressos
     if (cart.eventItems.length > 0 && vals.events) {
       const allNames = []
       const allPhones = []
-      
+
       vals.events.forEach(event => {
         if (event.registrations) {
           event.registrations.forEach((reg, regIndex) => {
