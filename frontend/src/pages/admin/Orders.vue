@@ -11,19 +11,31 @@
       <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="flex flex-col">
           <label class="text-xs text-gray-500 mb-1">Nº do Pedido</label>
-          <input v-model="filters.order" type="text" placeholder="Ex: 12345"
-            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500" />
+          <input 
+            v-model="filters.order" 
+            @input="debouncedLoad"
+            type="text" 
+            placeholder="Ex: 12345"
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500" 
+          />
         </div>
 
         <div class="flex flex-col lg:col-span-2">
           <label class="text-xs text-gray-500 mb-1">Cliente</label>
-          <input v-model="filters.client" type="text" placeholder="Nome do cliente"
-            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500" />
+          <input 
+            v-model="filters.client" 
+            @input="debouncedLoad"
+            type="text" 
+            placeholder="Nome do cliente"
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500" 
+          />
         </div>
 
         <div class="flex flex-col">
           <label class="text-xs text-gray-500 mb-1">Status</label>
-          <select v-model="filters.status"
+          <select 
+            v-model="filters.status" 
+            @change="handleStatusChange"
             class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500">
             <option value="">Todos</option>
             <option value="pending">Pendente</option>
@@ -35,7 +47,9 @@
 
         <div class="flex flex-col">
           <label class="text-xs text-gray-500 mb-1">Pagamento</label>
-          <select v-model="filters.payment"
+          <select 
+            v-model="filters.payment" 
+            @change="handlePaymentChange"
             class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500">
             <option value="">Todos</option>
             <option value="PIX">PIX</option>
@@ -78,54 +92,54 @@
 
           <div class="p-6">
             <div v-if="orders.length" class="overflow-x-auto">
-              <table class="w-full text-sm border rounded-lg overflow-hidden">
-                <thead class="bg-gray-100 text-gray-700">
+              <table class="min-w-full bg-white border border-gray-200 rounded-lg">
+                <thead class="bg-gray-50">
                   <tr>
-                    <th class="p-3 border text-left">#</th>
-                    <th class="p-3 border text-left">Pedido</th>
-                    <th class="p-3 border text-left">Cliente</th>
-                    <th class="p-3 border text-left">Valor</th>
-                    <th class="p-3 border text-left">Status</th>
-                    <th class="p-3 border text-left">Pagamento</th>
-                    <th class="p-3 border text-left">Data</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Pedido</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprador</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inscrições</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Método</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr v-for="o in orders" :key="o.id" class="hover:bg-gray-50 transition">
-                    <td class="p-3 border text-gray-600">{{ o.id }}</td>
-                    <td class="p-3 border">
-                      <a :href="`/orders/${o.order_number}`" class="text-blue-600 font-medium hover:underline">
-                        #{{ o.order_number }}
-                      </a>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="order in orders" :key="order.id"
+                    class="hover:bg-gray-50 transition">
+                    <td class="px-4 py-3 text-sm font-mono text-gray-900">
+                      {{ order.payment_id || order.id || '-' }}
                     </td>
-                    <td class="p-3 border text-gray-800 truncate max-w-[180px]">
-                      {{ o.buyer_name }}
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                      <div v-if="order.buyer">
+                        <div class="font-medium">{{ order.buyer.name || '-' }}</div>
+                        <div class="text-xs text-gray-500">{{ order.buyer.cpf || '' }}</div>
+                      </div>
+                      <span v-else>-</span>
                     </td>
-                    <td class="p-3 border">
-                      <span class="font-semibold text-gray-900">{{ displayTotal(o) }}</span>
-                      <div v-if="isCardInstallments(o)" class="text-xs text-gray-600">
-                        Parcelado em {{ installmentCount(o) }}x de {{ perInstallment(o) }}
+                    <td class="px-4 py-3 text-sm text-gray-600">
+                      {{ order.registrations_count || order.registrations?.length || 0 }} ingresso(s)
+                      <div v-if="order.registrations && order.registrations.length > 0" class="text-xs text-gray-500 mt-1">
+                        <div v-for="reg in order.registrations.slice(0, 3)" :key="reg.id">
+                          • {{ reg.name }} - {{ reg.event?.name || 'Evento' }}
+                        </div>
+                        <div v-if="order.registrations.length > 3" class="text-gray-400">
+                          ... e mais {{ order.registrations.length - 3 }}
+                        </div>
                       </div>
                     </td>
-                    <td class="p-3 border">
-                      <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold"
-                        :class="statusPillClass(statusGateway(o))">
-                        <font-awesome-icon :icon="statusIcon(statusGateway(o))" />
-                        {{ statusLabel(statusGateway(o)) }}
+                    <td class="px-4 py-3 text-sm font-semibold text-blue-600">
+                      {{ formatBRL(order.total_amount || 0) }}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">
+                      {{ formatPaymentMethod(order.payment_method) }}
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <span class="px-2 py-1 rounded text-xs font-medium" :class="getStatusClass(order.payment_status)">
+                        {{ getStatusLabel(order.payment_status) }}
                       </span>
                     </td>
-                    <td class="p-3 border">
-                      <font-awesome-icon v-if="methodLabel(o) === 'PIX'" :icon="['fab', 'pix']"
-                        class="text-green-600" />
-                      <font-awesome-icon v-else-if="methodLabel(o) === 'Boleto'" :icon="['fas', 'barcode']"
-                        class="text-gray-600" />
-                      <font-awesome-icon v-else-if="methodLabel(o) === 'Cartão de Crédito'"
-                        :icon="['fas', 'credit-card']" class="text-blue-600" />
-                      <span>{{ methodLabel(o) }}</span>
-                    </td>
-                    <td class="p-3 border text-gray-700">
-                      {{ formatDateBR(o.created_at) }}
-                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">{{ formatDate(order.created_at) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -137,24 +151,40 @@
           </div>
         </div>
 
-        <Pagination v-if="pagination?.last_page > 1" :currentPage="page" :lastPage="pagination.last_page"
-          @change="goToPage" />
+        <!-- Paginação -->
+        <div v-if="pagination && pagination.total > pagination.per_page" class="mt-6 flex items-center justify-between">
+          <div class="text-sm text-gray-700">
+            Mostrando {{ pagination.from }} a {{ pagination.to }} de {{ pagination.total }} pedidos
+          </div>
+          <div class="flex gap-2">
+            <button v-if="pagination.current_page > 1" @click="goToPage(pagination.current_page - 1)"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+              Anterior
+            </button>
+            <button v-if="pagination.current_page < pagination.last_page" @click="goToPage(pagination.current_page + 1)"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+              Próxima
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import http from '@/api/http'
-import Loading from '@/components/Loading.vue'
-import Pagination from '@/components/Pagination.vue'
-import PeriodPicker from '@/components/PeriodPicker.vue'
+import { ref, onMounted } from 'vue'
+import { registrationsApi, eventsApi } from '@/api/events'
+import { useCurrency } from '@/composables/useCurrency'
 import { useDebounce } from '@/composables/useDebounce'
-import { useLocalStorage } from '@/composables/useLocalStorage'
+import { FontAwesomeIcon } from '@/plugins/fontawesome'
+import Loading from '@/components/Loading.vue'
+import PeriodPicker from '@/components/PeriodPicker.vue'
 import { format } from 'date-fns'
 
+const { formatBRL } = useCurrency()
 const orders = ref([])
+const events = ref([])
 const page = ref(1)
 const pagination = ref({})
 const loading = ref(false)
@@ -169,7 +199,22 @@ const defaultFilters = {
   date_type: 'created_at'
 }
 
-const filters = useLocalStorage('orders_filters', defaultFilters)
+const filters = ref({ ...defaultFilters })
+
+async function loadEvents() {
+  try {
+    const response = await eventsApi.list()
+    if (response.data) {
+      if (Array.isArray(response.data)) {
+        events.value = response.data
+      } else if (response.data.data) {
+        events.value = response.data.data
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao carregar eventos:', error)
+  }
+}
 
 function setPeriod(range) {
   if (Array.isArray(range) && range.length === 2) {
@@ -179,30 +224,68 @@ function setPeriod(range) {
     filters.value.from = ''
     filters.value.to = ''
   }
-}
-
-function buildQuery() {
-  const params = new URLSearchParams()
-  params.append('page', page.value)
-  if (filters.value.order) params.append('order_number', filters.value.order)
-  if (filters.value.client) params.append('buyer_name', filters.value.client)
-  if (filters.value.status) params.append('status', filters.value.status)
-  if (filters.value.payment) params.append('payment', filters.value.payment)
-  if (filters.value.from && filters.value.to) {
-    params.append('from', filters.value.from)
-    params.append('to', filters.value.to)
-    params.append('date_type', filters.value.date_type)
-  }
-  return params.toString()
+  page.value = 1
+  load()
 }
 
 async function load() {
   try {
     loading.value = true
-    const query = buildQuery()
-    const { data } = await http.get(`/admin/orders?${query}`)
-    orders.value = data.data
-    pagination.value = data
+    const params = {
+      page: page.value,
+      per_page: 15,
+      group_by_payment: true // Agrupar por pagamento para mostrar pedidos
+    }
+    
+    if (filters.value.order && filters.value.order.trim()) {
+      // O backend busca por asaas_payment_id quando group_by_payment é true
+      // Vamos passar como parâmetro para filtrar após agrupar
+      params.payment_id = filters.value.order.trim()
+    }
+    
+    if (filters.value.client && filters.value.client.trim()) {
+      params.buyer_name = filters.value.client.trim()
+    }
+    
+    if (filters.value.status) {
+      params.paymentStatus = filters.value.status
+    }
+    
+    if (filters.value.payment) {
+      params.payment_method = filters.value.payment
+    }
+    
+    if (filters.value.from && filters.value.to) {
+      params.from = filters.value.from
+      params.to = filters.value.to
+      params.date_type = filters.value.date_type
+    }
+    
+    const response = await registrationsApi.list(params)
+    
+    if (response.data) {
+      let ordersData = []
+      let paginationData = null
+      
+      if (Array.isArray(response.data)) {
+        ordersData = response.data
+      } else if (response.data.data) {
+        ordersData = response.data.data
+        paginationData = {
+          current_page: response.data.current_page || 1,
+          last_page: response.data.last_page || 1,
+          per_page: response.data.per_page || 15,
+          total: response.data.total || 0,
+          from: response.data.from || 0,
+          to: response.data.to || 0
+        }
+      }
+      
+      orders.value = ordersData
+      pagination.value = paginationData
+    }
+  } catch (error) {
+    console.error('Erro ao carregar pedidos:', error)
   } finally {
     loading.value = false
   }
@@ -214,11 +297,20 @@ function clearFilters() {
   load()
 }
 
-const debouncedLoad = useDebounce(load, 600)
-watch(filters, () => {
+function handleStatusChange() {
   page.value = 1
-  debouncedLoad()
-}, { deep: true })
+  load()
+}
+
+function handlePaymentChange() {
+  page.value = 1
+  load()
+}
+
+const debouncedLoad = useDebounce(() => {
+  page.value = 1
+  load()
+}, 500)
 
 function goToPage(p) {
   if (p >= 1 && p <= (pagination.value?.last_page || 1)) {
@@ -227,144 +319,56 @@ function goToPage(p) {
   }
 }
 
-onMounted(load)
-
-function formatCurrency(cents) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100)
-}
-
-function formatDateBR(value) {
+function formatDate(value) {
   if (!value) return ''
   return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo'
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo'
   }).format(new Date(value))
 }
 
-function statusLabel(status) {
-  switch (status) {
-    case 'pending': return 'Pendente'
-    case 'paid': return 'Pago'
-    case 'canceled': return 'Cancelado'
-    case 'overdue': return 'Vencido'
-    default: return status
+function formatPaymentMethod(method) {
+  if (!method) return '-'
+  const methods = {
+    'PIX': 'PIX',
+    'BOLETO': 'Boleto',
+    'CREDIT_CARD': 'Cartão de Crédito',
+    'FREE': 'Gratuito'
   }
+  return methods[method.toUpperCase()] || method
 }
 
-function statusGateway(o) {
-  const s = o?.gateway_payload?.payment?.status?.toUpperCase?.()
-  const main = o?.status?.toLowerCase?.()
-
-  if (main && ['pending', 'paid', 'canceled', 'overdue'].includes(main)) {
-    return main
+function getStatusLabel(status) {
+  if (!status) return 'Pendente'
+  const labels = {
+    'pending': 'Pendente',
+    'paid': 'Pago',
+    'canceled': 'Cancelado',
+    'refunded': 'Reembolsado',
+    'overdue': 'Vencido'
   }
-  if (s === 'RECEIVED' || s === 'CONFIRMED') return 'paid'
-  if (s === 'PENDING') return 'pending'
-  if (s === 'CANCELLED' || s === 'DELETED') return 'canceled'
-  if (s === 'OVERDUE') return 'overdue'
-  return main || 'pending'
+  return labels[status.toLowerCase()] || status
 }
 
-function statusPillClass(status) {
-  if (status === 'paid') return 'text-green-600 font-semibold'
-  if (status === 'pending') return 'text-yellow-600 font-semibold'
-  if (status === 'canceled') return 'text-red-600 font-semibold'
-  if (status === 'overdue') return 'text-orange-600 font-semibold'
-  return 'text-gray-600 font-semibold'
-}
-
-function statusIcon(status) {
-  if (status === 'paid') return ['fas', 'check-circle']
-  if (status === 'pending') return ['fas', 'hourglass-half']
-  if (status === 'canceled') return ['fas', 'times-circle']
-  if (status === 'overdue') return ['fas', 'exclamation-triangle']
-  return ['fas', 'hourglass-half']
-}
-
-function methodLabel(o) {
-  const t = (o?.gateway_payload?.payment?.billingType || o?.payment_method || '').toUpperCase()
-  if (t === 'PIX') return 'PIX'
-  if (t === 'BOLETO') return 'Boleto'
-  if (t === 'CREDIT_CARD') return 'Cartão de Crédito'
-  return '—'
-}
-
-function isCardInstallments(o) {
-  const t = (o?.gateway_payload?.billingType || o?.payment_method || '').toUpperCase()
-  if (t !== 'CREDIT_CARD') return false
-  const cnt = Number(o?.gateway_payload?.installmentCount || 0)
-  if (cnt > 1) return true
-  const desc = o?.gateway_payload?.description || ''
-  return /Parcela\s+\d+\s+de\s+\d+/i.test(desc)
-}
-
-function installmentCount(o) {
-  const cnt = Number(o?.gateway_payload?.installmentCount || 0)
-  if (cnt > 1) return cnt
-  const desc = o?.gateway_payload?.description || ''
-  const m = desc.match(/de\s+(\d+)/i)
-  return m ? Number(m[1]) : 1
-}
-
-function itemUnitPriceCents(i) {
-  if (i?.variant?.product?.base_price != null) return Math.round(Number(i.variant.product.base_price))
-  if (i?.unit_price != null) {
-    const up = Number(i.unit_price)
-    return up >= 1000 ? Math.round(up) : Math.round(up * 100)
+function getStatusClass(status) {
+  if (!status) return 'bg-gray-100 text-gray-700'
+  const classes = {
+    'pending': 'bg-yellow-100 text-yellow-700',
+    'paid': 'bg-green-100 text-green-700',
+    'canceled': 'bg-red-100 text-red-700',
+    'refunded': 'bg-purple-100 text-purple-700',
+    'overdue': 'bg-orange-100 text-orange-700'
   }
-  return 0
+  return classes[status.toLowerCase()] || 'bg-gray-100 text-gray-700'
 }
 
-function itemsSubtotalCents(items = []) {
-  return items.reduce((s, it) => s + itemUnitPriceCents(it) * Number(it.quantity || 1), 0)
-}
+onMounted(async () => {
+  await loadEvents()
+  await load()
+})
 
-const toCents = (v) => Math.round(Number(v || 0) * 100)
-
-function estimateBaseFromGatewayCents(o) {
-  const gp = o?.gateway_payload || {}
-  const count = installmentCount(o)
-  const percent = Number(gp.appliedPercentTax || 0)
-  const fix = toCents(gp.appliedFixTax || 0)
-  const per = gp.installmentValue != null ? toCents(gp.installmentValue) : gp.value != null ? toCents(gp.value) : null
-  if (per != null && count > 1) {
-    const total = per * count
-    return Math.max(0, Math.round((total - fix) / (1 + percent / 100)))
-  }
-  if (gp.value != null && !count) {
-    const total = toCents(gp.value)
-    return Math.max(0, Math.round((total - fix) / (1 + percent / 100)))
-  }
-  return null
-}
-
-function totalWithInstallmentsCents(o) {
-  const gp = o?.gateway_payload || {}
-  if (isCardInstallments(o)) {
-    if (gp.totalValue != null) return toCents(gp.totalValue)
-    const base =
-      (Array.isArray(o.items) && o.items.length ? itemsSubtotalCents(o.items) : null) ??
-      estimateBaseFromGatewayCents(o) ??
-      0
-    const percent = Number(gp.appliedPercentTax || 0)
-    const fix = toCents(gp.appliedFixTax || 0)
-    return Math.round(base * (1 + percent / 100) + fix)
-  }
-  if (gp.totalValue != null) return toCents(gp.totalValue)
-  if (gp.value != null) return toCents(gp.value)
-  return 0
-}
-
-function perInstallment(o) {
-  const gp = o?.gateway_payload || {}
-  if (!isCardInstallments(o)) return null
-  if (gp.installmentValue != null) return formatCurrency(toCents(gp.installmentValue))
-  if (gp.value != null && installmentCount(o) > 1) return formatCurrency(toCents(gp.value))
-  const count = installmentCount(o)
-  return formatCurrency(Math.round(totalWithInstallmentsCents(o) / Math.max(1, count)))
-}
-
-function displayTotal(o) {
-  return formatCurrency(totalWithInstallmentsCents(o))
-}
 </script>

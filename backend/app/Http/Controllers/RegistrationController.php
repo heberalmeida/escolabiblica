@@ -101,6 +101,42 @@ class RegistrationController extends Controller
         usort($orders, function ($a, $b) {
             return $b['created_at'] <=> $a['created_at'];
         });
+        
+        // Filtrar por payment_id após agrupar (se fornecido)
+        $paymentId = $request->input('payment_id');
+        if ($paymentId && trim($paymentId)) {
+            $orders = array_filter($orders, function ($order) use ($paymentId) {
+                $orderPaymentId = (string) ($order['payment_id'] ?? '');
+                return stripos($orderPaymentId, trim($paymentId)) !== false;
+            });
+            $orders = array_values($orders);
+        }
+        
+        // Filtrar por método de pagamento após agrupar (se fornecido)
+        $paymentMethod = $request->input('payment_method');
+        if ($paymentMethod) {
+            $orders = array_filter($orders, function ($order) use ($paymentMethod) {
+                $method = strtoupper($order['payment_method'] ?? '');
+                return $method === strtoupper($paymentMethod);
+            });
+            $orders = array_values($orders);
+        }
+        
+        // Filtrar por período após agrupar (se fornecido)
+        $from = $request->input('from');
+        $to = $request->input('to');
+        if ($from && $to) {
+            $orders = array_filter($orders, function ($order) use ($from, $to) {
+                $createdAt = $order['created_at'];
+                if (!$createdAt) return false;
+                $date = $createdAt instanceof \Carbon\Carbon ? $createdAt : \Carbon\Carbon::parse($createdAt);
+                return $date->between(
+                    \Carbon\Carbon::parse($from . ' 00:00:00'),
+                    \Carbon\Carbon::parse($to . ' 23:59:59')
+                );
+            });
+            $orders = array_values($orders);
+        }
 
         // Paginar manualmente
         $page = $request->input('page', 1);
