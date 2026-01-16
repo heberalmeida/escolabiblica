@@ -73,7 +73,7 @@ async function loadEvents() {
   try {
     loading.value = true
     const response = await eventsApi.list()
-    
+
     // A API retorna paginação
     if (response.data) {
       if (Array.isArray(response.data)) {

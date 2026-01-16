@@ -33,7 +33,7 @@
                 Inscrições até {{ formatDate(event.end_date) }}
               </span>
             </div>
-            <button 
+            <button
               @click="addToCart(event)"
               class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-center transition">
               Adicionar ao Carrinho
@@ -74,7 +74,7 @@ async function loadEvents() {
     loading.value = true
     // Buscar apenas eventos disponíveis (end_date >= hoje)
     const response = await eventsApi.list({ available: 'true', active: 'true' })
-    
+
     // A API retorna paginação
     if (response.data) {
       if (Array.isArray(response.data)) {
@@ -87,7 +87,7 @@ async function loadEvents() {
     } else {
       events.value = []
     }
-    
+
     console.log('Eventos carregados:', events.value)
   } catch (error) {
     console.error('Erro ao carregar eventos:', error)

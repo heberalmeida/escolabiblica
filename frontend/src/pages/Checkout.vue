@@ -729,8 +729,8 @@ const installmentOptions = computed(() => {
   const fix = 49 // R$ 0,49 em centavos
   const options = []
   
-  // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
-  const vistaPercent = 2.99 + 1.25 // Total: 4,24%
+  // À vista: R$ 0,49 + 2,99% + (1,70% × 1 mês)
+  const vistaPercent = 2.99 + (1.70 * 1) // 2,99% fixo + 1,70% ao mês
   const vistaTotal = total.value + fix + total.value * (vistaPercent / 100)
   options.push({
     count: 1,
@@ -756,13 +756,17 @@ const installmentOptions = computed(() => {
     
     // Só adicionar se o valor total atender ao mínimo
     if (total.value >= minValue) {
-      let percent = 0
+      let percentFixo = 0
       if (n >= 2 && n <= 6) {
-        percent = 3.49
+        // 2 à 6 parcelas: R$ 0,49 + 3,49% (fixo) + (1,70% × n meses)
+        percentFixo = 3.49
       } else if (n >= 7 && n <= 12) {
-        percent = 3.99
+        // 7 à 12 parcelas: R$ 0,49 + 3,99% (fixo) + (1,70% × n meses)
+        percentFixo = 3.99
       }
       
+      // Taxa total = taxa fixa + (1,70% × número de meses)
+      const percent = percentFixo + (1.70 * n)
       const totalComTaxa = total.value + fix + total.value * (percent / 100)
       const parcela = totalComTaxa / n
       options.push({ count: n, parcela, total: totalComTaxa, percent })
@@ -780,15 +784,19 @@ function grandTotal(vals) {
   if (vals.method === 'BOLETO' && chargeBoleto) return total.value + 199
   if (vals.method === 'CREDIT_CARD' && chargeCard) {
     const n = Number(vals.installments || 1)
-    let percent = 0
+    let percentFixo = 0
     if (n === 1) {
-      // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
-      percent = 2.99 + 1.25 // Total: 4,24%
+      // À vista: R$ 0,49 + 2,99% (fixo) + (1,70% × 1 mês)
+      percentFixo = 2.99
     } else if (n >= 2 && n <= 6) {
-      percent = 3.49
+      // 2 à 6 parcelas: R$ 0,49 + 3,49% (fixo) + (1,70% × n meses)
+      percentFixo = 3.49
     } else if (n >= 7 && n <= 12) {
-      percent = 3.99
+      // 7 à 12 parcelas: R$ 0,49 + 3,99% (fixo) + (1,70% × n meses)
+      percentFixo = 3.99
     }
+    // Taxa total = taxa fixa + (1,70% × número de meses)
+    const percent = percentFixo + (1.70 * n)
     return total.value + fix + total.value * (percent / 100)
   }
   return total.value
@@ -797,9 +805,9 @@ function grandTotal(vals) {
 function cardTax(vals) {
   if (vals.method !== 'CREDIT_CARD' || !chargeCard) return null
   const n = Number(vals.installments || 1)
-  if (n === 1) return `R$ 0,49 + 2,99% + 1,25%`
-  if (n >= 2 && n <= 6) return `R$ 0,49 + 3,49%`
-  if (n >= 7 && n <= 12) return `R$ 0,49 + 3,99%`
+  if (n === 1) return `R$ 0,49 + 2,99% + 1,70%`
+  if (n >= 2 && n <= 6) return `R$ 0,49 + 3,49% + ${(1.70 * n).toFixed(2)}%`
+  if (n >= 7 && n <= 12) return `R$ 0,49 + 3,99% + ${(1.70 * n).toFixed(2)}%`
   return null
 }
 
@@ -852,13 +860,19 @@ function buildPayload(vals) {
 }
 
 function cardPercent(n) {
+  let percentFixo = 0
   if (n === 1) {
-    // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
-    return 2.99 + 1.25 // Total: 4,24%
+    // À vista: R$ 0,49 + 2,99% (fixo) + (1,70% × 1 mês)
+    percentFixo = 2.99
+  } else if (n >= 2 && n <= 6) {
+    // 2 à 6 parcelas: R$ 0,49 + 3,49% (fixo) + (1,70% × n meses)
+    percentFixo = 3.49
+  } else if (n >= 7 && n <= 12) {
+    // 7 à 12 parcelas: R$ 0,49 + 3,99% (fixo) + (1,70% × n meses)
+    percentFixo = 3.99
   }
-  if (n >= 2 && n <= 6) return 3.49
-  if (n >= 7 && n <= 12) return 3.99
-  return 0
+  // Taxa total = taxa fixa + (1,70% × número de meses)
+  return percentFixo + (1.70 * n)
 }
 
 function handleCepInput(val, setFieldValue) {

@@ -14,7 +14,7 @@
         <!-- Mensagem de debug (remover em produção) -->
         <div v-if="events.length === 0" class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p class="text-sm text-yellow-800">
-            <strong>Debug:</strong> Nenhum evento encontrado. 
+            <strong>Debug:</strong> Nenhum evento encontrado.
             <br />Verifique o console do navegador (F12) para mais detalhes.
             <br />Certifique-se de que as migrations foram executadas e o evento foi cadastrado.
           </p>
@@ -23,10 +23,10 @@
         <div v-if="events.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div v-for="event in events" :key="event.id"
             class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition">
-            <div v-if="event.image" class="h-48 bg-gray-200 overflow-hidden">
+            <div v-if="event.image" class="bg-gray-200 overflow-hidden">
               <img :src="getImageUrl(event.image)" :alt="event.name" class="w-full h-full object-cover" />
             </div>
-            <div v-else class="h-48 bg-blue-100 flex items-center justify-center">
+            <div v-else class="bg-blue-100 flex items-center justify-center">
               <font-awesome-icon :icon="['fas', 'calendar']" class="text-6xl text-blue-300" />
             </div>
             <div class="p-4">
@@ -43,7 +43,7 @@
                   Inscrições até {{ formatDate(event.end_date) }}
                 </span>
               </div>
-              <button 
+              <button
                 @click="addToCart(event)"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-center transition">
                 Adicionar ao Carrinho
@@ -91,7 +91,7 @@ async function loadEvents() {
     loading.value = true
     // Buscar apenas eventos disponíveis (end_date >= hoje e active = true)
     const response = await eventsApi.list({ available: 'true', active: 'true' })
-    
+
     // A API pode retornar array direto ou paginação
     if (response.data) {
       if (Array.isArray(response.data)) {
@@ -106,7 +106,7 @@ async function loadEvents() {
     } else {
       events.value = []
     }
-    
+
     console.log('Eventos carregados:', events.value.length, 'evento(s)')
     if (events.value.length === 0) {
       console.warn('Nenhum evento encontrado. Verifique se as migrations foram executadas e se há eventos cadastrados.')

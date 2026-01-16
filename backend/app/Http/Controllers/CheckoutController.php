@@ -406,14 +406,19 @@ class CheckoutController extends Controller
                 } elseif ($data['payment']['method'] === 'CREDIT_CARD') {
                     $fixCents = 49; // R$ 0,49
                     // Calcular percentual baseado no número de parcelas
+                    $percentFixo = 0;
                     if ($installments === 1) {
-                        // À vista: R$ 0,49 + 2,99% + 1,25% (taxa de antecipação)
-                        $percent = 2.99 + 1.25; // Total: 4,24%
+                        // À vista: R$ 0,49 + 2,99% (fixo) + (1,70% × 1 mês)
+                        $percentFixo = 2.99;
                     } elseif ($installments >= 2 && $installments <= 6) {
-                        $percent = 3.49;
+                        // 2 à 6 parcelas: R$ 0,49 + 3,49% (fixo) + (1,70% × n meses)
+                        $percentFixo = 3.49;
                     } elseif ($installments >= 7 && $installments <= 12) {
-                        $percent = 3.99;
+                        // 7 à 12 parcelas: R$ 0,49 + 3,99% (fixo) + (1,70% × n meses)
+                        $percentFixo = 3.99;
                     }
+                    // Taxa total = taxa fixa + (1,70% × número de meses)
+                    $percent = $percentFixo + (1.70 * $installments);
                 }
             }
 
