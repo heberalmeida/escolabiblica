@@ -19,12 +19,14 @@
       <form @submit.prevent="search"
         class="flex flex-col gap-4 justify-center mb-10 max-w-2xl mx-auto">
         <div class="flex flex-col sm:flex-row gap-4">
-          <input v-model="cpf" v-maska="'###.###.###-##'" placeholder="Digite seu CPF"
+          <input v-model="cpf" v-maska="'###.###.###-##'" placeholder="CPF"
             class="flex-1 bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-          <input v-model="birthDate" v-maska="'##/##/####'" placeholder="DD/MM/AAAA"
+          <input v-model="birthDate" v-maska="'##/##/####'" placeholder="Nascimento"
             class="flex-1 bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
         </div>
-        <button type="submit" :disabled="loading || !cpf || !birthDate"
+        <button 
+          type="submit" 
+          :disabled="loading || !cpf || !birthDate"
           class="bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer hover:bg-blue-700 disabled:bg-gray-400 transition">
           {{ loading ? 'Buscando...' : 'Buscar Inscrições' }}
         </button>
@@ -163,6 +165,7 @@ const orders = ref([]) // Pedidos agrupados
 const allRegistrations = ref([]) // Todas as registrations para impressão
 
 onMounted(() => {
+  // Se houver dados salvos de CPF, usar busca por CPF
   if (savedCpf.value && savedBirthDate.value) {
     cpf.value = savedCpf.value
     // Se a data salva está em formato AAAA-MM-DD, converter para DD/MM/AAAA
@@ -183,46 +186,52 @@ watch([orders, allRegistrations], async () => {
 }, { deep: true })
 
 async function search(setupListeners = false, page = 1) {
-  const cleanCpf = cpf.value.replace(/\D/g, '')
-  if (!validateCpf(cleanCpf)) {
-    error.value = 'CPF inválido.'
-    return
-  }
-  
-  if (!birthDate.value) {
-    error.value = 'Por favor, informe sua data de nascimento.'
-    return
-  }
-  
-  // Validar formato da data DD/MM/AAAA
-  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(birthDate.value)) {
-    error.value = 'Data de nascimento inválida. Use o formato DD/MM/AAAA.'
-    return
-  }
-  
-  // Converter data de DD/MM/AAAA para AAAA-MM-DD
-  const [day, month, year] = birthDate.value.split('/')
-  const formattedBirthDate = `${year}-${month}-${day}`
-  
-  // Validar se é uma data válida
-  const dateObj = new Date(year, month - 1, day)
-  if (dateObj.getFullYear() != year || dateObj.getMonth() != month - 1 || dateObj.getDate() != day) {
-    error.value = 'Data de nascimento inválida.'
-    return
-  }
-  
   loading.value = true
   error.value = null
   orders.value = []
   allRegistrations.value = []
+  
   try {
-    // Buscar registrations agrupadas por pagamento
-    const { data } = await registrationsApi.getByCpf(cleanCpf, { 
+    const cleanCpf = cpf.value.replace(/\D/g, '')
+    if (!validateCpf(cleanCpf)) {
+      error.value = 'CPF inválido.'
+      loading.value = false
+      return
+    }
+    
+    if (!birthDate.value) {
+      error.value = 'Por favor, informe a data de nascimento do comprador.'
+      loading.value = false
+      return
+    }
+    
+    // Validar formato da data DD/MM/AAAA
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(birthDate.value)) {
+      error.value = 'Data de nascimento inválida. Use o formato DD/MM/AAAA.'
+      loading.value = false
+      return
+    }
+    
+    // Converter data de DD/MM/AAAA para AAAA-MM-DD
+    const [day, month, year] = birthDate.value.split('/')
+    const formattedBirthDate = `${year}-${month}-${day}`
+    
+    // Validar se é uma data válida
+    const dateObj = new Date(year, month - 1, day)
+    if (dateObj.getFullYear() != year || dateObj.getMonth() != month - 1 || dateObj.getDate() != day) {
+      error.value = 'Data de nascimento inválida.'
+      loading.value = false
+      return
+    }
+    
+    // Buscar registrations agrupadas por pagamento usando CPF e data de nascimento do COMPRADOR
+    const response = await registrationsApi.getByCpf(cleanCpf, { 
       page, 
       per_page: 12, 
       group_by_payment: true,
       birth_date: formattedBirthDate
     })
+    const data = response.data
     
     if (data.data && Array.isArray(data.data)) {
       // Dados já vêm agrupados do backend
@@ -267,8 +276,8 @@ async function search(setupListeners = false, page = 1) {
     
     currentPage.value = data.current_page || 1
     lastPage.value = data.last_page || 1
+    // Salvar dados na sessão
     setCpfSession(cpf.value)
-    // Salvar no formato DD/MM/AAAA para exibição
     setBirthDateSession(birthDate.value)
     
     // Configurar listeners do Firebase
@@ -486,8 +495,8 @@ async function printOrder(order) {
       '<div class="info">',
       '<div class="info-row"><span class="info-label">Número de Inscrição:</span><span>' + reg.registration_number + '</span></div>',
       '<div class="info-row"><span class="info-label">Nome:</span><span>' + reg.name + '</span></div>',
+      '<div class="info-row"><span class="info-label">Telefone:</span><span>' + (reg.phone ? formatPhone(reg.phone) : '-') + '</span></div>',
       '<div class="info-row"><span class="info-label">CPF:</span><span>' + formattedCpf + '</span></div>',
-      '<div class="info-row"><span class="info-label">Telefone:</span><span>' + (reg.phone || '-') + '</span></div>',
       '<div class="info-row"><span class="info-label">Valor Pago:</span><span>' + formattedPrice + '</span></div>',
       '</div>',
       '<div class="qr-code">',
@@ -568,8 +577,8 @@ async function printRegistration(registration) {
     '<div class="info">',
     '<div class="info-row"><span class="info-label">Número de Inscrição:</span><span>' + registrationNumber + '</span></div>',
     '<div class="info-row"><span class="info-label">Nome:</span><span>' + registration.name + '</span></div>',
+    '<div class="info-row"><span class="info-label">Telefone:</span><span>' + (registration.phone ? formatPhone(registration.phone) : '-') + '</span></div>',
     '<div class="info-row"><span class="info-label">CPF:</span><span>' + formattedCpf + '</span></div>',
-    '<div class="info-row"><span class="info-label">Telefone:</span><span>' + (registration.phone || '-') + '</span></div>',
     '<div class="info-row"><span class="info-label">Data de Nascimento:</span><span>' + formattedDate + '</span></div>',
     '<div class="info-row"><span class="info-label">Valor Pago:</span><span>' + formattedPrice + '</span></div>',
     '<div class="info-row"><span class="info-label">Status:</span><span style="color: #10b981; font-weight: bold;">Pago</span></div>',
@@ -657,6 +666,7 @@ async function printAll() {
       '<div class="info">',
       '<div class="info-row"><span class="info-label">Número de Inscrição:</span><span>' + reg.registration_number + '</span></div>',
       '<div class="info-row"><span class="info-label">Nome:</span><span>' + reg.name + '</span></div>',
+      '<div class="info-row"><span class="info-label">Telefone:</span><span>' + (reg.phone ? formatPhone(reg.phone) : '-') + '</span></div>',
       '<div class="info-row"><span class="info-label">CPF:</span><span>' + formattedCpf + '</span></div>',
       '<div class="info-row"><span class="info-label">Valor Pago:</span><span>' + formattedPrice + '</span></div>',
       '</div>',

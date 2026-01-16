@@ -40,14 +40,14 @@
           </li>
         </ul>
 
-        <Form :validation-schema="schema" @submit="onSubmit" v-slot="{ errors, values, setFieldValue }" :initial-values="getInitialValues()" :validate-on-mount="false">
+        <Form :validation-schema="schema" @submit="onSubmit" v-slot="{ errors, values, setFieldValue, validate, meta, setErrors, setTouched }" :initial-values="getInitialValues()" :validate-on-mount="false" :validate-on-blur="true" :validate-on-change="true" :validate-on-input="false">
           <!-- Informação sobre Eventos -->
           <div v-if="cart.eventItems.length > 0" class="mb-6">
             <div v-for="(eventItem, eventIndex) in cart.eventItems" :key="eventItem.eventId" class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <h3 class="text-lg font-semibold text-blue-800 mb-2">{{ eventItem.name }}</h3>
               <p class="text-sm text-blue-600 mb-1">Quantidade: {{ eventItem.quantity }} ingresso(s)</p>
-              <p v-if="eventItem.quantity > 1" class="text-xs text-blue-500 italic">
-                * O mesmo nome será usado para todos os {{ eventItem.quantity }} ingressos
+              <p class="text-xs text-blue-500 italic">
+                * Cada ingresso deve ter nome e telefone únicos
               </p>
             </div>
           </div>
@@ -55,9 +55,9 @@
           <ErrorMessage name="total" class="text-red-600 text-sm text-center block mb-2" />
 
           <div class="bg-white p-4 rounded-2xl shadow-sm space-y-4 mt-4">
-            <h2 class="text-lg font-semibold text-gray-800 border-b pb-2">Dados Pessoais</h2>
-            <p v-if="cart.eventItems.length > 0" class="text-xs text-blue-600 mb-4">
-              * Estes dados serão usados para o comprador e para o(s) inscrito(s) no(s) evento(s)
+            <h2 class="text-lg font-semibold text-gray-800 border-b pb-2">Dados do Comprador</h2>
+            <p class="text-xs text-gray-600 mb-4">
+              * Estes dados são do comprador/pagador. Os dados dos ingressos serão preenchidos abaixo.
             </p>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -82,6 +82,19 @@
               </div>
 
               <div>
+                <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
+                <Field name="birth_date" v-slot="{ field }">
+                  <input
+                    v-bind="field"
+                    v-maska="'##/##/####'"
+                    placeholder="DD/MM/AAAA"
+                    class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                    :class="errors.birth_date ? 'border-red-600' : 'border-gray-300'" />
+                </Field>
+                <ErrorMessage name="birth_date" class="text-red-600 text-xs mt-1" />
+              </div>
+
+              <div>
                 <label class="block text-sm font-medium mb-1">Telefone *</label>
                 <Field name="phone" v-slot="{ field }">
                   <input v-bind="field" v-maska="'(##) #####-####'"
@@ -101,105 +114,272 @@
                 <ErrorMessage name="email" class="text-red-600 text-xs mt-1" />
               </div>
 
-              <!-- Campos adicionais para eventos -->
+              <!-- Campos para ingressos de eventos -->
               <template v-if="cart.eventItems.length > 0">
                 <div v-for="(eventItem, eventIndex) in cart.eventItems" :key="eventItem.eventId" class="col-span-1 sm:col-span-2 lg:col-span-4">
-                  <div class="border-t pt-4 mt-4">
-                    <h4 class="text-sm font-semibold text-gray-700 mb-3">{{ eventItem.name }} - Dados Adicionais</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
-                        <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
-                        <Field :name="`events.${eventIndex}.registrations.0.birth_date`" v-slot="{ field }">
-                          <input
-                            v-bind="field"
-                            v-maska="'##/##/####'"
-                            placeholder="DD/MM/AAAA"
-                            class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition" />
-                        </Field>
-                        <ErrorMessage :name="`events.${eventIndex}.registrations.0.birth_date`" class="text-red-600 text-xs mt-1" />
-                      </div>
-
-                      <div>
-                        <label class="block text-sm font-medium mb-1">Gênero *</label>
-                        <div class="flex gap-4">
+                  <div class="border-t pt-6 mt-6">
+                    <h4 class="text-lg font-semibold text-gray-800 mb-4">{{ eventItem.name }} - Dados dos Ingressos</h4>
+                    <p class="text-xs text-gray-600 mb-4">Preencha os dados de cada ingresso. Nome e telefone devem ser únicos.</p>
+                    
+                    <div v-for="(reg, regIndex) in getEventRegistrations(eventIndex)" :key="regIndex" class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div class="mb-3">
+                        <div v-if="regIndex === 0" class="mb-2">
                           <label class="flex items-center gap-2 cursor-pointer">
-                            <Field :name="`events.${eventIndex}.registrations.0.gender`" type="radio" value="MASCULINO" v-slot="{ field }">
-                              <input type="radio" v-bind="field" />
-                            </Field>
-                            <span class="text-sm">Masculino</span>
-                          </label>
-                          <label class="flex items-center gap-2 cursor-pointer">
-                            <Field :name="`events.${eventIndex}.registrations.0.gender`" type="radio" value="FEMININO" v-slot="{ field }">
-                              <input type="radio" v-bind="field" />
-                            </Field>
-                            <span class="text-sm">Feminino</span>
+                            <input
+                              type="checkbox"
+                              @change="(e) => handleCopyBuyerData(e.target.checked, eventIndex, setFieldValue, values)"
+                              class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                            <span class="text-sm text-blue-600 font-medium">Copiar dados do comprador</span>
                           </label>
                         </div>
-                        <ErrorMessage :name="`events.${eventIndex}.registrations.0.gender`" class="text-red-600 text-xs mt-1" />
+                        <div v-else-if="regIndex === 1 && eventItem.quantity > 1 && values.events?.[eventIndex]?.registrations?.[0]?.church_affiliation && values.events?.[eventIndex]?.registrations?.[0]?.sector && values.events?.[eventIndex]?.registrations?.[0]?.congregation" class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                          <label class="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              @change="(e) => handleCopyChurchData(e.target.checked, eventIndex, setFieldValue, values)"
+                              class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                            <span class="text-sm text-blue-700 font-medium">Copiar dados da igreja do primeiro ingresso para todos</span>
+                          </label>
+                        </div>
+                        <h5 class="text-sm font-semibold text-gray-700">Ingresso {{ regIndex + 1 }}</h5>
                       </div>
-
-                      <div>
-                        <label class="block text-sm font-medium mb-1">Setor</label>
-                        <Field :name="`events.${eventIndex}.registrations.0.sector`" v-slot="{ field }">
-                          <select
-                            v-bind="field"
-                            @change="(e) => { field.onChange(e); setFieldValue(`events.${eventIndex}.registrations.0.congregation`, '') }"
-                            @blur="field.onBlur"
-                            class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition">
-                            <option value="">Selecione</option>
-                            <option v-for="sector in eventSectors" :key="sector.value" :value="sector.value">
-                              {{ sector.name }}
-                            </option>
-                          </select>
-                        </Field>
-                      </div>
-
-                      <div>
-                        <label class="block text-sm font-medium mb-1">Congregação</label>
-                        <Field :name="`events.${eventIndex}.registrations.0.congregation`" v-slot="{ field }">
-                          <select
-                            v-bind="field"
-                            @change="field.onChange"
-                            @blur="field.onBlur"
-                            class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition">
-                            <option value="">Selecione</option>
-                            <option v-for="church in getChurchesBySector(values.events?.[eventIndex]?.registrations?.[0]?.sector)" :key="church.id || church.nome" :value="church.nome">
-                              {{ church.nome }}
-                            </option>
-                          </select>
-                        </Field>
-                      </div>
-
-                      <div>
-                        <label class="block text-sm font-medium mb-1">Tipo</label>
-                        <Field :name="`events.${eventIndex}.registrations.0.church_type`" v-slot="{ field }">
-                          <select
-                            v-bind="field"
-                            @change="field.onChange"
-                            @blur="field.onBlur"
-                            class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition">
-                            <option value="">Selecione</option>
-                            <option value="De outra igreja">De outra igreja</option>
-                            <option value="Membro">Membro</option>
-                            <option value="Diácono">Diácono</option>
-                            <option value="Diaconisa">Diaconisa</option>
-                            <option value="Presbítero">Presbítero</option>
-                            <option value="Missionária">Missionária</option>
-                            <option value="Evangelista">Evangelista</option>
-                            <option value="Pastor">Pastor</option>
-                            <option value="Missionário">Missionário</option>
-                            <option value="Visitante">Visitante</option>
-                          </select>
-                        </Field>
-                      </div>
-
-                      <div class="col-span-1 sm:col-span-2 lg:col-span-4">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                          <Field :name="`events.${eventIndex}.registrations.0.whatsapp_authorization`" type="checkbox" v-slot="{ field }">
-                            <input type="checkbox" v-bind="field" />
+                      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="col-span-1 sm:col-span-2">
+                          <label class="block text-sm font-medium mb-1">Nome completo *</label>
+                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.name`" v-slot="{ field, meta }">
+                            <input
+                              v-bind="field"
+                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.name`] ? 'border-red-600' : 'border-gray-300'" />
                           </Field>
-                          <span class="text-sm">Autoriza receber novidades via WhatsApp</span>
-                        </label>
+                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.name`" class="text-red-600 text-xs mt-1" />
+                        </div>
+
+                        <div>
+                          <label class="block text-sm font-medium mb-1">Telefone *</label>
+                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.phone`" v-slot="{ field, meta }">
+                            <input
+                              v-bind="field"
+                              v-maska="'(##) #####-####'"
+                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.phone`] ? 'border-red-600' : 'border-gray-300'" />
+                          </Field>
+                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.phone`" class="text-red-600 text-xs mt-1" />
+                        </div>
+
+                        <div>
+                          <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
+                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.birth_date`" v-slot="{ field, meta }">
+                            <input
+                              v-bind="field"
+                              v-maska="'##/##/####'"
+                              placeholder="DD/MM/AAAA"
+                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.birth_date`] ? 'border-red-600' : 'border-gray-300'" />
+                          </Field>
+                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.birth_date`" class="text-red-600 text-xs mt-1" />
+                        </div>
+
+                        <div>
+                          <label class="block text-sm font-medium mb-1">Gênero *</label>
+                          <div class="flex gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                              <Field :name="`events.${eventIndex}.registrations.${regIndex}.gender`" type="radio" value="MASCULINO" v-slot="{ field }">
+                                <input type="radio" v-bind="field" />
+                              </Field>
+                              <span class="text-sm">Masculino</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                              <Field :name="`events.${eventIndex}.registrations.${regIndex}.gender`" type="radio" value="FEMININO" v-slot="{ field }">
+                                <input type="radio" v-bind="field" />
+                              </Field>
+                              <span class="text-sm">Feminino</span>
+                            </label>
+                          </div>
+                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.gender`" class="text-red-600 text-xs mt-1" />
+                        </div>
+
+                        <div class="col-span-1 sm:col-span-2 lg:col-span-4">
+                          <label class="block text-sm font-medium mb-1">Afiliação *</label>
+                          <Field :name="`events.${eventIndex}.registrations.${regIndex}.church_affiliation`" v-slot="{ field, meta }">
+                            <select
+                              v-bind="field"
+                              @change="(e) => { 
+                                field.onChange(e); 
+                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.sector`, ''); 
+                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.congregation`, ''); 
+                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.church_type`, ''); 
+                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.position`, ''); 
+                                setFieldValue(`events.${eventIndex}.registrations.${regIndex}.other_church_name`, '');
+                                // Forçar validação dos campos dependentes
+                                setTimeout(() => {
+                                  validate(`events.${eventIndex}.registrations.${regIndex}.sector`);
+                                  validate(`events.${eventIndex}.registrations.${regIndex}.congregation`);
+                                  validate(`events.${eventIndex}.registrations.${regIndex}.church_type`);
+                                  validate(`events.${eventIndex}.registrations.${regIndex}.position`);
+                                  validate(`events.${eventIndex}.registrations.${regIndex}.other_church_name`);
+                                }, 100);
+                              }"
+                              @blur="field.onBlur"
+                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                              :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.church_affiliation`] ? 'border-red-600' : 'border-gray-300'">
+                              <option value="">Selecione</option>
+                              <option value="ASSEMBLEIA">Assembleia de Deus Missões de Campo Grande</option>
+                              <option value="OUTRA_IGREJA">De outra igreja</option>
+                              <option value="NAO_EVANGELICO">Não evangélico</option>
+                            </select>
+                          </Field>
+                          <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.church_affiliation`" class="text-red-600 text-xs mt-1" />
+                        </div>
+
+                        <!-- Campos condicionais para Assembleia -->
+                        <template v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_affiliation === 'ASSEMBLEIA'">
+                          <div>
+                            <label class="block text-sm font-medium mb-1">Setor *</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.sector`" v-slot="{ field, meta }">
+                              <select
+                                v-bind="field"
+                                @change="(e) => { field.onChange(e); setFieldValue(`events.${eventIndex}.registrations.${regIndex}.congregation`, '') }"
+                                @blur="field.onBlur"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.sector`] ? 'border-red-600' : 'border-gray-300'">
+                                <option value="">Selecione</option>
+                                <option v-for="sector in eventSectors" :key="sector.value" :value="sector.value">
+                                  {{ sector.name }}
+                                </option>
+                              </select>
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.sector`" class="text-red-600 text-xs mt-1" />
+                          </div>
+
+                          <div>
+                            <label class="block text-sm font-medium mb-1">Congregação *</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.congregation`" v-slot="{ field, meta }">
+                              <select
+                                v-bind="field"
+                                @change="field.onChange"
+                                @blur="field.onBlur"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.congregation`] ? 'border-red-600' : 'border-gray-300'">
+                                <option value="">Selecione</option>
+                                <option v-for="church in getChurchesBySector(values.events?.[eventIndex]?.registrations?.[regIndex]?.sector)" :key="church.id || church.nome" :value="church.nome">
+                                  {{ church.nome }}
+                                </option>
+                              </select>
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.congregation`" class="text-red-600 text-xs mt-1" />
+                          </div>
+
+                          <div>
+                            <label class="block text-sm font-medium mb-1">Tipo *</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" v-slot="{ field, meta }">
+                              <select
+                                v-bind="field"
+                                @change="(e) => { 
+                                  field.onChange(e);
+                                  setFieldValue(`events.${eventIndex}.registrations.${regIndex}.position`, '');
+                                  setTimeout(() => {
+                                    validate(`events.${eventIndex}.registrations.${regIndex}.position`);
+                                  }, 100);
+                                }"
+                                @blur="field.onBlur"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.church_type`] ? 'border-red-600' : 'border-gray-300'">
+                                <option value="">Selecione</option>
+                                <option value="Membro">Membro</option>
+                                <option value="Diácono">Diácono</option>
+                                <option value="Diaconisa">Diaconisa</option>
+                                <option value="Presbítero">Presbítero</option>
+                                <option value="Missionária">Missionária</option>
+                                <option value="Evangelista">Evangelista</option>
+                                <option value="Pastor">Pastor</option>
+                                <option value="Missionário">Missionário</option>
+                                <option value="Visitante">Visitante</option>
+                                <option value="OUTRO">Outro (escrever cargo)</option>
+                              </select>
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" class="text-red-600 text-xs mt-1" />
+                          </div>
+
+                          <div v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_type === 'OUTRO'" class="col-span-1 sm:col-span-2 lg:col-span-4">
+                            <label class="block text-sm font-medium mb-1">Cargo *</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.position`" v-slot="{ field, meta }">
+                              <input
+                                v-bind="field"
+                                placeholder="Digite o cargo"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.position`] ? 'border-red-600' : 'border-gray-300'" />
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.position`" class="text-red-600 text-xs mt-1" />
+                          </div>
+                        </template>
+
+                        <!-- Campos condicionais para De outra igreja -->
+                        <template v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_affiliation === 'OUTRA_IGREJA'">
+                          <div class="col-span-1 sm:col-span-2 lg:col-span-4">
+                            <label class="block text-sm font-medium mb-1">Nome da Igreja *</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.other_church_name`" v-slot="{ field, meta }">
+                              <input
+                                v-bind="field"
+                                placeholder="Digite o nome da igreja"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="(meta.touched && meta.errors) || errors[`events.${eventIndex}.registrations.${regIndex}.other_church_name`] ? 'border-red-600' : 'border-gray-300'" />
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.other_church_name`" class="text-red-600 text-xs mt-1" />
+                          </div>
+
+                          <div>
+                            <label class="block text-sm font-medium mb-1">Cargo Ministerial</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" v-slot="{ field }">
+                              <select
+                                v-bind="field"
+                                @change="(e) => { 
+                                  field.onChange(e);
+                                  setFieldValue(`events.${eventIndex}.registrations.${regIndex}.position`, '');
+                                  setTimeout(() => {
+                                    validate(`events.${eventIndex}.registrations.${regIndex}.position`);
+                                  }, 100);
+                                }"
+                                @blur="field.onBlur"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="errors[`events.${eventIndex}.registrations.${regIndex}.church_type`] ? 'border-red-600' : 'border-gray-300'">
+                                <option value="">Selecione (opcional)</option>
+                                <option value="Membro">Membro</option>
+                                <option value="Diácono">Diácono</option>
+                                <option value="Diaconisa">Diaconisa</option>
+                                <option value="Presbítero">Presbítero</option>
+                                <option value="Missionária">Missionária</option>
+                                <option value="Evangelista">Evangelista</option>
+                                <option value="Pastor">Pastor</option>
+                                <option value="Missionário">Missionário</option>
+                                <option value="Visitante">Visitante</option>
+                                <option value="OUTRO">Outro (escrever cargo)</option>
+                              </select>
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.church_type`" class="text-red-600 text-xs mt-1" />
+                          </div>
+
+                          <div v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_type === 'OUTRO'" class="col-span-1 sm:col-span-2 lg:col-span-4">
+                            <label class="block text-sm font-medium mb-1">Cargo *</label>
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.position`" v-slot="{ field }">
+                              <input
+                                v-bind="field"
+                                placeholder="Digite o cargo"
+                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                                :class="errors[`events.${eventIndex}.registrations.${regIndex}.position`] ? 'border-red-600' : 'border-gray-300'" />
+                            </Field>
+                            <ErrorMessage :name="`events.${eventIndex}.registrations.${regIndex}.position`" class="text-red-600 text-xs mt-1" />
+                          </div>
+                        </template>
+
+                        <div class="col-span-1 sm:col-span-2 lg:col-span-4">
+                          <label class="flex items-center gap-2 cursor-pointer">
+                            <Field :name="`events.${eventIndex}.registrations.${regIndex}.whatsapp_authorization`" type="checkbox" v-slot="{ field }">
+                              <input type="checkbox" v-bind="field" :checked="field.value === true || field.value === undefined" />
+                            </Field>
+                            <span class="text-sm">Autoriza receber novidades via WhatsApp</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -325,6 +505,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div
+                v-if="availablePaymentMethods.includes('PIX')"
                 class="p-6 border rounded-2xl cursor-pointer flex flex-col items-center justify-center gap-3 transition hover:shadow-md"
                 :class="values.method === 'PIX'
                   ? 'border-green-600 bg-green-50 text-green-700 font-semibold shadow-md'
@@ -334,6 +515,7 @@
               </div>
 
               <div
+                v-if="availablePaymentMethods.includes('BOLETO')"
                 class="p-6 border rounded-2xl cursor-pointer flex flex-col items-center justify-center gap-3 transition hover:shadow-md"
                 :class="values.method === 'BOLETO'
                   ? 'border-green-600 bg-green-50 text-green-700 font-semibold shadow-md'
@@ -343,6 +525,7 @@
               </div>
 
               <div
+                v-if="availablePaymentMethods.includes('CREDIT_CARD')"
                 class="p-6 border rounded-2xl cursor-pointer flex flex-col items-center justify-center gap-3 transition hover:shadow-md"
                 :class="values.method === 'CREDIT_CARD'
                   ? 'border-green-600 bg-green-50 text-green-700 font-semibold shadow-md'
@@ -453,7 +636,7 @@ import { useCurrency } from '@/composables/useCurrency'
 import { Form, Field, ErrorMessage } from 'vee-validate'
 import * as yup from 'yup'
 import Toast from '@/components/Toast.vue'
-import { churchesApi } from '@/api/events'
+import { churchesApi, eventsApi } from '@/api/events'
 import { vMaska } from 'maska/vue'
 
 const cart = useCartStore()
@@ -467,6 +650,7 @@ const loadingCep = ref(false)
 let cepTimer = null
 const churches = ref([])
 const eventSectors = ref([])
+const events = ref([]) // Para armazenar dados completos dos eventos (incluindo paymentMethods)
 
 // Mapeamento de setores para nomes completos (baseado no JSON real)
 const sectorNames = {
@@ -513,10 +697,55 @@ const setores = {
 onMounted(async () => {
   if (cart.eventItems.length > 0) {
     await loadChurches()
+    await loadEvents()
   }
   setTimeout(() => {
     loading.value = false
   }, 600)
+})
+
+async function loadEvents() {
+  try {
+    const eventIds = cart.eventItems.map(item => item.eventId)
+    const promises = eventIds.map(id => eventsApi.get(id))
+    const responses = await Promise.all(promises)
+    events.value = responses.map(r => r.data)
+  } catch (error) {
+    console.error('Erro ao carregar eventos:', error)
+    events.value = []
+  }
+}
+
+const availablePaymentMethods = computed(() => {
+  if (cart.eventItems.length === 0) {
+    // Se não há eventos, retornar todos os métodos
+    return ['PIX', 'BOLETO', 'CREDIT_CARD']
+  }
+  
+  // Se há eventos, verificar métodos ativos de todos os eventos
+  const allMethods = new Set()
+  
+  events.value.forEach(event => {
+    if (event.payment_methods) {
+      event.payment_methods.forEach(pm => {
+        if (pm.active && pm.method !== 'FREE') {
+          allMethods.add(pm.method)
+        }
+      })
+    }
+  })
+  
+  // Se evento é gratuito, adicionar FREE
+  const hasFreeEvents = cart.eventItems.some(item => {
+    const event = events.value.find(e => e.id === item.eventId)
+    return event && event.price === 0
+  })
+  
+  if (hasFreeEvents) {
+    allMethods.add('FREE')
+  }
+  
+  return Array.from(allMethods)
 })
 
 async function loadChurches() {
@@ -575,9 +804,65 @@ function getChurchesBySector(selectedSector) {
   })
 }
 
-function getEventRegistrations(eventId) {
-  // Sempre retorna apenas 1, pois o mesmo nome será usado para todos os ingressos
-  return [0]
+function getEventRegistrations(eventIndex) {
+  // Retorna array com índices de 0 até quantity-1 para cada ingresso
+  const eventItem = cart.eventItems[eventIndex]
+  if (!eventItem) return []
+  return Array.from({ length: eventItem.quantity }, (_, i) => i)
+}
+
+function handleCopyBuyerData(checked, eventIndex, setFieldValue, formValues) {
+  if (checked) {
+    // Copiar nome, telefone e data de nascimento do comprador para o primeiro ingresso
+    if (!formValues.name || !formValues.phone || !formValues.birth_date) {
+      toastRef.value.open('Preencha primeiro os dados do comprador (nome, telefone e data de nascimento).', 'warning')
+      return
+    }
+    
+    setFieldValue(`events.${eventIndex}.registrations.0.name`, formValues.name)
+    setFieldValue(`events.${eventIndex}.registrations.0.phone`, formValues.phone)
+    setFieldValue(`events.${eventIndex}.registrations.0.birth_date`, formValues.birth_date)
+    
+    toastRef.value.open('Dados do comprador copiados para o primeiro ingresso!', 'success')
+  } else {
+    // Limpar dados do comprador do primeiro ingresso quando desmarcar
+    setFieldValue(`events.${eventIndex}.registrations.0.name`, '')
+    setFieldValue(`events.${eventIndex}.registrations.0.phone`, '')
+    setFieldValue(`events.${eventIndex}.registrations.0.birth_date`, '')
+  }
+}
+
+function handleCopyChurchData(checked, eventIndex, setFieldValue, formValues) {
+  const eventItem = cart.eventItems[eventIndex]
+  if (!eventItem || eventItem.quantity <= 1) return
+  
+  if (checked) {
+    // Copiar afiliação, setor e congregação do primeiro ingresso (índice 0) para todos os demais
+    const firstReg = formValues?.events?.[eventIndex]?.registrations?.[0]
+    if (!firstReg || !firstReg.church_affiliation || !firstReg.sector || !firstReg.congregation) {
+      toastRef.value.open('Preencha primeiro a afiliação, setor e congregação no primeiro ingresso.', 'warning')
+      return
+    }
+    
+    // Copiar afiliação, setor e congregação (não copiar tipo, position, etc)
+    for (let i = 1; i < eventItem.quantity; i++) {
+      setFieldValue(`events.${eventIndex}.registrations.${i}.church_affiliation`, firstReg.church_affiliation || '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.sector`, firstReg.sector || '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.congregation`, firstReg.congregation || '')
+    }
+    
+    toastRef.value.open('Afiliação, setor e congregação copiados para todos os ingressos!', 'success')
+  } else {
+    // Limpar afiliação, setor e congregação dos ingressos subsequentes quando desmarcar
+    for (let i = 1; i < eventItem.quantity; i++) {
+      setFieldValue(`events.${eventIndex}.registrations.${i}.church_affiliation`, '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.sector`, '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.congregation`, '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.church_type`, '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.position`, '')
+      setFieldValue(`events.${eventIndex}.registrations.${i}.other_church_name`, '')
+    }
+  }
 }
 
 function getInitialValues() {
@@ -589,6 +874,7 @@ function getInitialValues() {
     installments: 1,
     name: 'Heber Almeida',
     cpf: '672.122.300-73',
+    birth_date: '11/12/2001',
     email: 'eu@heber.com.br',
     phone: '(67) 99288-2549',
     postalCode: '79000000',
@@ -603,20 +889,24 @@ function getInitialValues() {
   }
 
 
-  // Se houver eventos, adicionar estrutura de eventos (apenas 1 registro, será duplicado no backend)
+  // Se houver eventos, adicionar estrutura de eventos com registrations individuais
   if (cart.eventItems.length > 0) {
     base.events = cart.eventItems.map((eventItem, eventIndex) => ({
       event_id: eventItem.eventId,
       quantity: eventItem.quantity,
-      registrations: [{
-        // DADOS DEFAULT PARA TESTE - REMOVER DEPOIS
-        birth_date: '15/05/1990',
-        gender: 'MASCULINO',
-        sector: '06', // Setor 06 - Tiradentes
-        congregation: 'Tiradentes',
-        church_type: 'Membro',
+      registrations: Array.from({ length: eventItem.quantity }, (_, i) => ({
+        name: '',
+        phone: '',
+        birth_date: '',
+        gender: '',
+        church_affiliation: '',
+        other_church_name: '',
+        sector: '',
+        congregation: '',
+        church_type: '',
+        position: '',
         whatsapp_authorization: true
-      }] // Apenas 1 registro, será duplicado conforme a quantidade
+      }))
     }))
   }
 
@@ -645,9 +935,14 @@ const schema = computed(() => {
   const baseSchema = {
     name: yup.string().required('Nome é obrigatório'),
     cpf: yup.string().required('CPF é obrigatório').test('cpf', 'CPF inválido', v => validateCPF(v)),
+    birth_date: yup.string().required('Data de nascimento é obrigatória').matches(/^\d{2}\/\d{2}\/\d{4}$/, 'Data inválida. Use o formato DD/MM/AAAA'),
     email: yup.string().email('Email inválido').required('Email é obrigatório'),
     phone: yup.string().required('Telefone é obrigatório'),
-    method: yup.string().oneOf(['PIX', 'BOLETO', 'CREDIT_CARD', 'FREE'], 'Selecione um método').required('Selecione um método'),
+    method: yup.string().oneOf(['PIX', 'BOLETO', 'CREDIT_CARD', 'FREE'], 'Selecione um método').required('Selecione um método').test('available-method', 'Método de pagamento não disponível para este evento', function(value) {
+      if (!value) return true
+      if (cart.eventItems.length === 0) return true
+      return availablePaymentMethods.value.includes(value)
+    }),
     installments: yup.number().when('method', {
       is: 'CREDIT_CARD',
       then: s => s.required('Selecione o parcelamento').min(1).max(10),
@@ -691,7 +986,7 @@ const schema = computed(() => {
     baseSchema.addressComplement = yup.string()
   }
 
-  // Se houver eventos, adicionar validação de inscrições (apenas 1 registro necessário, sem nome/telefone/cpf pois vem do comprador)
+  // Se houver eventos, adicionar validação de inscrições (cada ingresso deve ter nome e telefone únicos)
   if (cart.eventItems.length > 0) {
     baseSchema.events = yup.array().of(
       yup.object({
@@ -699,14 +994,39 @@ const schema = computed(() => {
         quantity: yup.number().required(),
         registrations: yup.array().of(
           yup.object({
+            name: yup.string().required('Nome completo é obrigatório').min(3, 'Nome deve ter pelo menos 3 caracteres'),
+            phone: yup.string().required('Telefone é obrigatório'),
             birth_date: yup.string().required('Data de nascimento é obrigatória').matches(/^\d{2}\/\d{2}\/\d{4}$/, 'Data inválida. Use o formato DD/MM/AAAA'),
             gender: yup.string().required('Gênero é obrigatório'),
-            sector: yup.string().nullable(),
-            congregation: yup.string().nullable(),
-            church_type: yup.string().nullable(),
+            church_affiliation: yup.string().required('Afiliação é obrigatória').oneOf(['ASSEMBLEIA', 'OUTRA_IGREJA', 'NAO_EVANGELICO'], 'Selecione uma afiliação válida'),
+            other_church_name: yup.string().when('church_affiliation', {
+              is: 'OUTRA_IGREJA',
+              then: s => s.required('Nome da igreja é obrigatório'),
+              otherwise: s => s.nullable()
+            }),
+            sector: yup.string().when('church_affiliation', {
+              is: 'ASSEMBLEIA',
+              then: s => s.required('Setor é obrigatório para Assembleia'),
+              otherwise: s => s.nullable()
+            }),
+            congregation: yup.string().when('church_affiliation', {
+              is: 'ASSEMBLEIA',
+              then: s => s.required('Congregação é obrigatória para Assembleia'),
+              otherwise: s => s.nullable()
+            }),
+            church_type: yup.string().when('church_affiliation', {
+              is: 'ASSEMBLEIA',
+              then: s => s.required('Tipo é obrigatório para Assembleia'),
+              otherwise: s => s.nullable()
+            }),
+            position: yup.string().when(['church_affiliation', 'church_type'], {
+              is: (affiliation, type) => (affiliation === 'ASSEMBLEIA' || affiliation === 'OUTRA_IGREJA') && type === 'OUTRO',
+              then: s => s.required('Cargo é obrigatório quando tipo é "Outro"'),
+              otherwise: s => s.nullable()
+            }),
             whatsapp_authorization: yup.boolean(),
           })
-        ).length(1, 'Apenas uma inscrição é necessária (será duplicada conforme a quantidade)')
+        )
       })
     ).min(1, 'Pelo menos um evento é obrigatório')
   }
@@ -904,29 +1224,32 @@ async function fetchCep(cep, setFieldValue) {
 function buildEventPayload(vals) {
   const events = cart.eventItems.map((eventItem, eventIndex) => {
     const eventData = vals.events?.[eventIndex] || { registrations: [] }
-    const firstReg = eventData.registrations?.[0] || {}
 
-    // Usar dados do comprador (buyer) para preencher nome, telefone e CPF se não estiverem preenchidos
-    const registration = {
-      name: firstReg.name || vals.name,
-      phone: firstReg.phone || vals.phone,
-      cpf: firstReg.cpf || vals.cpf,
-      birth_date: firstReg.birth_date,
-      sector: firstReg.sector || null,
-      congregation: firstReg.congregation || null,
-      church_type: firstReg.church_type || null,
-      gender: firstReg.gender,
-      whatsapp_authorization: firstReg.whatsapp_authorization || false,
-    }
+    // Processar cada registro individualmente
+    const registrations = eventData.registrations.map((reg) => {
+      const registration = {
+        name: reg.name,
+        phone: reg.phone.replace(/\D/g, ''),
+        cpf: reg.cpf ? reg.cpf.replace(/\D/g, '') : null,
+        birth_date: reg.birth_date,
+        gender: reg.gender,
+        church_affiliation: reg.church_affiliation,
+        other_church_name: reg.church_affiliation === 'OUTRA_IGREJA' ? reg.other_church_name : null,
+        sector: reg.church_affiliation === 'ASSEMBLEIA' ? reg.sector : null,
+        congregation: reg.church_affiliation === 'ASSEMBLEIA' ? reg.congregation : null,
+        church_type: (reg.church_affiliation === 'ASSEMBLEIA' || reg.church_affiliation === 'OUTRA_IGREJA') ? reg.church_type : null,
+        position: ((reg.church_affiliation === 'ASSEMBLEIA' || reg.church_affiliation === 'OUTRA_IGREJA') && reg.church_type === 'OUTRO') ? reg.position : null,
+        whatsapp_authorization: reg.whatsapp_authorization || false,
+      }
 
-    // Converter data de DD/MM/AAAA para AAAA-MM-DD
-    if (registration.birth_date && registration.birth_date.includes('/')) {
-      const [day, month, year] = registration.birth_date.split('/')
-      registration.birth_date = `${year}-${month}-${day}`
-    }
+      // Converter data de DD/MM/AAAA para AAAA-MM-DD
+      if (registration.birth_date && registration.birth_date.includes('/')) {
+        const [day, month, year] = registration.birth_date.split('/')
+        registration.birth_date = `${year}-${month}-${day}`
+      }
 
-    // Duplicar o registro para todas as quantidades
-    const registrations = Array(eventItem.quantity).fill(null).map(() => ({ ...registration }))
+      return registration
+    })
 
     return {
       event_id: eventItem.eventId,
@@ -935,10 +1258,18 @@ function buildEventPayload(vals) {
     }
   })
 
+  // Converter birth_date de DD/MM/AAAA para AAAA-MM-DD
+  let buyerBirthDate = vals.birth_date
+  if (buyerBirthDate && buyerBirthDate.includes('/')) {
+    const [day, month, year] = buyerBirthDate.split('/')
+    buyerBirthDate = `${year}-${month}-${day}`
+  }
+
   const payload = {
     buyer: {
       name: vals.name,
       cpf: vals.cpf.replace(/\D/g, ''),
+      birth_date: buyerBirthDate,
       email: vals.email,
       phone: vals.phone.replace(/\D/g, ''),
       postalCode: vals.postalCode.replace(/\D/g, ''),
@@ -969,9 +1300,285 @@ function buildEventPayload(vals) {
   return payload
 }
 
-async function onSubmit(vals) {
+async function onSubmit(vals, { setErrors, setFieldError, setTouched }) {
   try {
-    loadingPay.value = true
+    // Primeiro, marcar todos os campos como "touched" para exibir erros
+    // Isso força o vee-validate a mostrar os erros visualmente
+    
+    // Verificar se há eventos pagos (usado em múltiplos lugares)
+    const hasPaidEvents = cart.eventItems.some(e => e.price > 0)
+    
+    // Marcar campos do comprador
+    setTouched('name', true)
+    setTouched('cpf', true)
+    setTouched('birth_date', true)
+    setTouched('phone', true)
+    setTouched('email', true)
+    
+    // Marcar campos de endereço
+    if ((hasPaidEvents && cart.productItems.length === 0) || cart.productItems.length > 0) {
+      setTouched('postalCode', true)
+      setTouched('address', true)
+      setTouched('addressNumber', true)
+      setTouched('province', true)
+      setTouched('city', true)
+      setTouched('state', true)
+    }
+    
+    // Marcar método de pagamento
+    setTouched('method', true)
+    
+    // Marcar campos do cartão se necessário
+    if (vals.method === 'CREDIT_CARD') {
+      setTouched('card.holderName', true)
+      setTouched('card.number', true)
+      setTouched('card.expiryMonth', true)
+      setTouched('card.expiryYear', true)
+      setTouched('card.ccv', true)
+      setTouched('installments', true)
+    }
+    
+    // Marcar campos dos ingressos
+    if (cart.eventItems.length > 0 && vals.events) {
+      vals.events.forEach((event, eventIndex) => {
+        if (event.registrations) {
+          event.registrations.forEach((reg, regIndex) => {
+            setTouched(`events.${eventIndex}.registrations.${regIndex}.name`, true)
+            setTouched(`events.${eventIndex}.registrations.${regIndex}.phone`, true)
+            setTouched(`events.${eventIndex}.registrations.${regIndex}.birth_date`, true)
+            setTouched(`events.${eventIndex}.registrations.${regIndex}.gender`, true)
+            setTouched(`events.${eventIndex}.registrations.${regIndex}.church_affiliation`, true)
+            
+            if (reg.church_affiliation === 'ASSEMBLEIA') {
+              setTouched(`events.${eventIndex}.registrations.${regIndex}.sector`, true)
+              setTouched(`events.${eventIndex}.registrations.${regIndex}.congregation`, true)
+              setTouched(`events.${eventIndex}.registrations.${regIndex}.church_type`, true)
+              if (reg.church_type === 'OUTRO') {
+                setTouched(`events.${eventIndex}.registrations.${regIndex}.position`, true)
+              }
+            }
+            
+            if (reg.church_affiliation === 'OUTRA_IGREJA') {
+              setTouched(`events.${eventIndex}.registrations.${regIndex}.other_church_name`, true)
+              if (reg.church_type === 'OUTRO') {
+                setTouched(`events.${eventIndex}.registrations.${regIndex}.position`, true)
+              }
+            }
+          })
+        }
+      })
+    }
+    
+    // Validar todos os campos antes de processar
+    const validationErrors = {}
+    let hasErrors = false
+    
+    // Validar campos do comprador
+    if (!vals.name || !vals.name.trim()) {
+      validationErrors.name = 'Nome completo é obrigatório'
+      hasErrors = true
+    }
+    if (!vals.cpf || !vals.cpf.replace(/\D/g, '')) {
+      validationErrors.cpf = 'CPF é obrigatório'
+      hasErrors = true
+    }
+    if (!vals.birth_date) {
+      validationErrors.birth_date = 'Data de nascimento é obrigatória'
+      hasErrors = true
+    }
+    if (!vals.phone || !vals.phone.replace(/\D/g, '')) {
+      validationErrors.phone = 'Telefone é obrigatório'
+      hasErrors = true
+    }
+    if (!vals.email || !vals.email.trim()) {
+      validationErrors.email = 'Email é obrigatório'
+      hasErrors = true
+    }
+    
+    // Validar endereço se necessário
+    if ((hasPaidEvents && cart.productItems.length === 0) || cart.productItems.length > 0) {
+      if (!vals.postalCode || !vals.postalCode.replace(/\D/g, '')) {
+        validationErrors.postalCode = 'CEP é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.address || !vals.address.trim()) {
+        validationErrors.address = 'Endereço é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.addressNumber || !vals.addressNumber.trim()) {
+        validationErrors.addressNumber = 'Número é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.province || !vals.province.trim()) {
+        validationErrors.province = 'Bairro é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.city || !vals.city.trim()) {
+        validationErrors.city = 'Cidade é obrigatória'
+        hasErrors = true
+      }
+      if (!vals.state || !vals.state.trim()) {
+        validationErrors.state = 'Estado é obrigatório'
+        hasErrors = true
+      }
+    }
+    
+    // Validar método de pagamento
+    if (!vals.method) {
+      validationErrors.method = 'Método de pagamento é obrigatório'
+      hasErrors = true
+    }
+    
+    // Validar cartão de crédito se necessário
+    if (vals.method === 'CREDIT_CARD') {
+      if (!vals.card || !vals.card.holderName || !vals.card.holderName.trim()) {
+        validationErrors['card.holderName'] = 'Nome no cartão é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.card || !vals.card.number || vals.card.number.replace(/\D/g, '').length < 13) {
+        validationErrors['card.number'] = 'Número do cartão é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.card || !vals.card.expiryMonth) {
+        validationErrors['card.expiryMonth'] = 'Mês de validade é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.card || !vals.card.expiryYear) {
+        validationErrors['card.expiryYear'] = 'Ano de validade é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.card || !vals.card.ccv || vals.card.ccv.length !== 3) {
+        validationErrors['card.ccv'] = 'CVV é obrigatório'
+        hasErrors = true
+      }
+      if (!vals.installments) {
+        validationErrors.installments = 'Parcelamento é obrigatório'
+        hasErrors = true
+      }
+    }
+    
+    // Validar registros de eventos
+    if (cart.eventItems.length > 0 && vals.events) {
+      vals.events.forEach((event, eventIndex) => {
+        if (event.registrations) {
+          event.registrations.forEach((reg, regIndex) => {
+            if (!reg.name || !reg.name.trim()) {
+              validationErrors[`events.${eventIndex}.registrations.${regIndex}.name`] = 'Nome completo é obrigatório'
+              hasErrors = true
+            }
+            if (!reg.phone || !reg.phone.replace(/\D/g, '')) {
+              validationErrors[`events.${eventIndex}.registrations.${regIndex}.phone`] = 'Telefone é obrigatório'
+              hasErrors = true
+            }
+            if (!reg.birth_date) {
+              validationErrors[`events.${eventIndex}.registrations.${regIndex}.birth_date`] = 'Data de nascimento é obrigatória'
+              hasErrors = true
+            }
+            if (!reg.gender) {
+              validationErrors[`events.${eventIndex}.registrations.${regIndex}.gender`] = 'Gênero é obrigatório'
+              hasErrors = true
+            }
+            if (!reg.church_affiliation) {
+              validationErrors[`events.${eventIndex}.registrations.${regIndex}.church_affiliation`] = 'Afiliação é obrigatória'
+              hasErrors = true
+            }
+            
+            // Validações condicionais
+            if (reg.church_affiliation === 'ASSEMBLEIA') {
+              if (!reg.sector) {
+                validationErrors[`events.${eventIndex}.registrations.${regIndex}.sector`] = 'Setor é obrigatório para Assembleia'
+                hasErrors = true
+              }
+              if (!reg.congregation) {
+                validationErrors[`events.${eventIndex}.registrations.${regIndex}.congregation`] = 'Congregação é obrigatória para Assembleia'
+                hasErrors = true
+              }
+              if (!reg.church_type) {
+                validationErrors[`events.${eventIndex}.registrations.${regIndex}.church_type`] = 'Tipo é obrigatório para Assembleia'
+                hasErrors = true
+              }
+              if (reg.church_type === 'OUTRO' && (!reg.position || !reg.position.trim())) {
+                validationErrors[`events.${eventIndex}.registrations.${regIndex}.position`] = 'Cargo é obrigatório quando tipo é "Outro"'
+                hasErrors = true
+              }
+            }
+            
+            if (reg.church_affiliation === 'OUTRA_IGREJA') {
+              if (!reg.other_church_name || !reg.other_church_name.trim()) {
+                validationErrors[`events.${eventIndex}.registrations.${regIndex}.other_church_name`] = 'Nome da igreja é obrigatório'
+                hasErrors = true
+              }
+              if (reg.church_type === 'OUTRO' && (!reg.position || !reg.position.trim())) {
+                validationErrors[`events.${eventIndex}.registrations.${regIndex}.position`] = 'Cargo é obrigatório quando tipo é "Outro"'
+                hasErrors = true
+              }
+            }
+          })
+        }
+      })
+    }
+    
+    // Se houver erros, exibir e parar
+    if (hasErrors) {
+      setErrors(validationErrors)
+      loadingPay.value = false
+      
+      // Fazer scroll para o primeiro erro
+      setTimeout(() => {
+        // Procurar por campos com erro (border-red-600 ou ErrorMessage visível)
+        const firstErrorField = document.querySelector('.border-red-600') || 
+                               document.querySelector('[class*="text-red-600"]') ||
+                               document.querySelector('input:invalid') ||
+                               document.querySelector('select:invalid')
+        
+        if (firstErrorField) {
+          firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          if (firstErrorField.focus) {
+            firstErrorField.focus()
+          }
+        } else {
+          // Se não encontrar campo, fazer scroll para o topo do formulário
+          const formElement = document.querySelector('form') || document.querySelector('[class*="Form"]')
+          if (formElement) {
+            formElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        }
+      }, 200)
+      
+      toastRef.value.open('Por favor, preencha todos os campos obrigatórios corretamente. Os campos com erro estão destacados em vermelho.', 'error')
+      return
+    }
+
+    // Validar nomes e telefones únicos entre todos os ingressos
+    if (cart.eventItems.length > 0 && vals.events) {
+      const allNames = []
+      const allPhones = []
+      
+      vals.events.forEach(event => {
+        if (event.registrations) {
+          event.registrations.forEach((reg, regIndex) => {
+            if (reg.name) {
+              const name = reg.name.trim().toLowerCase()
+              if (allNames.includes(name)) {
+                toastRef.value.open('Não é permitido ter nomes iguais entre os ingressos.', 'error')
+                loadingPay.value = false
+                return
+              }
+              allNames.push(name)
+            }
+            if (reg.phone) {
+              const phone = reg.phone.replace(/\D/g, '')
+              if (allPhones.includes(phone)) {
+                toastRef.value.open('Não é permitido ter telefones iguais entre os ingressos.', 'error')
+                loadingPay.value = false
+                return
+              }
+              allPhones.push(phone)
+            }
+          })
+        }
+      })
+    }
 
     // Se houver apenas eventos, processar eventos
     if (cart.eventItems.length > 0 && cart.productItems.length === 0) {

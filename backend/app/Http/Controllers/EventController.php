@@ -17,7 +17,9 @@ class EventController extends Controller
         $active = $request->input('active', null);
         $available = $request->input('available', null); // Para listar apenas eventos disponíveis para inscrição
 
-        $query = Event::with('paymentMethods');
+        $query = Event::with(['paymentMethods' => function ($query) {
+            $query->where('active', true);
+        }]);
 
         if ($active !== null) {
             $query->where('active', filter_var($active, FILTER_VALIDATE_BOOLEAN));
@@ -90,13 +92,17 @@ class EventController extends Controller
                 ]);
             }
 
-            return response()->json($event->load('paymentMethods'), 201);
+            return response()->json($event->load(['paymentMethods' => function ($query) {
+                $query->where('active', true);
+            }]), 201);
         });
     }
 
     public function show($id)
     {
-        $event = Event::with('paymentMethods')->findOrFail($id);
+        $event = Event::with(['paymentMethods' => function ($query) {
+            $query->where('active', true);
+        }])->findOrFail($id);
         return response()->json($event, 200);
     }
 
@@ -155,7 +161,9 @@ class EventController extends Controller
                 }
             }
 
-            return response()->json($event->load('paymentMethods'), 200);
+            return response()->json($event->load(['paymentMethods' => function ($query) {
+                $query->where('active', true);
+            }]), 200);
         });
     }
 

@@ -28,6 +28,11 @@ class Event extends Model
         return $this->hasMany(EventPaymentMethod::class);
     }
 
+    public function activePaymentMethods()
+    {
+        return $this->hasMany(EventPaymentMethod::class)->where('active', true);
+    }
+
     public function registrations()
     {
         return $this->hasMany(Registration::class);

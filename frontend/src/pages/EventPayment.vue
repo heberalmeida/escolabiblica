@@ -259,6 +259,16 @@ function statusIcon(status) {
   }
 }
 
+function formatPhone(phone) {
+  const p = (phone || '').replace(/\D/g, '')
+  if (p.length === 11) {
+    return p.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+  } else if (p.length === 10) {
+    return p.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+  }
+  return phone
+}
+
 function formatPaymentMethod(method) {
   const methods = {
     'PIX': 'PIX',
@@ -911,9 +921,9 @@ async function printOrder() {
       '<h2>Inscrição #' + (index + 1) + '</h2>',
       '<div class="info"><strong>Número:</strong> ' + (reg.registration_number || reg.id) + '</div>',
       '<div class="info"><strong>Nome:</strong> ' + reg.name + '</div>',
+      '<div class="info"><strong>Telefone:</strong> ' + (reg.phone ? formatPhone(reg.phone) : 'Não informado') + '</div>',
       '<div class="info"><strong>Evento:</strong> ' + (reg.event?.name || 'Evento') + '</div>',
       '<div class="info"><strong>CPF:</strong> ' + (reg.cpf || 'Não informado') + '</div>',
-      '<div class="info"><strong>Telefone:</strong> ' + (reg.phone || 'Não informado') + '</div>',
       '<div class="qr-code">',
       '<p><strong>QR Code:</strong></p>',
       qrCodeImages[reg.id] ? '<img src="' + qrCodeImages[reg.id] + '" alt="QR Code" />' : '<p>QR Code não disponível</p>',

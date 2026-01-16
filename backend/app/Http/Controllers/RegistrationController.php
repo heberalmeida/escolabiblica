@@ -15,6 +15,8 @@ class RegistrationController extends Controller
     {
         $perPage = $request->input('per_page', 10);
         $eventId = $request->input('event_id');
+        $name = $request->input('name');
+        $paymentStatus = $request->input('payment_status');
         // Converter string "false" para boolean false
         $groupByPayment = filter_var($request->input('group_by_payment', true), FILTER_VALIDATE_BOOLEAN);
 
@@ -22,6 +24,14 @@ class RegistrationController extends Controller
 
         if ($eventId) {
             $query->where('event_id', $eventId);
+        }
+
+        if ($name && trim($name)) {
+            $query->where('name', 'like', '%' . trim($name) . '%');
+        }
+
+        if ($paymentStatus) {
+            $query->where('payment_status', $paymentStatus);
         }
 
         // Se não agrupar por pagamento, retornar lista simples
@@ -33,6 +43,25 @@ class RegistrationController extends Controller
 
         // Agrupar por pagamento (asaas_payment_id ou created_at para gratuitas)
         $allRegistrations = $query->orderByDesc('created_at')->get();
+
+        // Filtrar por nome do comprador se fornecido (buscar no gateway_payload)
+        $buyerName = $request->input('buyer_name');
+        if ($buyerName && trim($buyerName)) {
+            $allRegistrations = $allRegistrations->filter(function ($registration) use ($buyerName) {
+                $gatewayPayload = $registration->gateway_payload;
+                if (is_array($gatewayPayload)) {
+                    // Buscar no campo buyer->name
+                    if (isset($gatewayPayload['buyer']['name'])) {
+                        return stripos($gatewayPayload['buyer']['name'], trim($buyerName)) !== false;
+                    }
+                    // Buscar no campo customer->name (formato antigo)
+                    if (isset($gatewayPayload['customer']['name'])) {
+                        return stripos($gatewayPayload['customer']['name'], trim($buyerName)) !== false;
+                    }
+                }
+                return false;
+            });
+        }
 
         // Agrupar registrations por payment_id ou por data de criação (para gratuitas)
         $grouped = [];
@@ -89,7 +118,18 @@ class RegistrationController extends Controller
                     ? $order['gateway_payload'] 
                     : json_decode($order['gateway_payload'], true);
                 
-                if (isset($gatewayPayload['customer'])) {
+                // Primeiro tentar buscar no campo 'buyer' (novo formato)
+                if (isset($gatewayPayload['buyer'])) {
+                    $buyerInfo = [
+                        'name' => $gatewayPayload['buyer']['name'] ?? null,
+                        'cpf' => $gatewayPayload['buyer']['cpf'] ?? null,
+                        'email' => $gatewayPayload['buyer']['email'] ?? null,
+                        'phone' => $gatewayPayload['buyer']['phone'] ?? null,
+                        'birth_date' => $gatewayPayload['buyer']['birth_date'] ?? null,
+                    ];
+                }
+                // Se não encontrou, tentar no campo 'customer' (formato antigo)
+                elseif (isset($gatewayPayload['customer'])) {
                     $buyerInfo = [
                         'name' => $gatewayPayload['customer']['name'] ?? null,
                         'cpf' => $gatewayPayload['customer']['cpfCnpj'] ?? $gatewayPayload['customer']['cpf'] ?? null,
@@ -626,10 +666,49 @@ class RegistrationController extends Controller
             ], 422);
         }
 
-        $query = Registration::with('event')
-            ->where('cpf', $cpf)
-            ->whereDate('birth_date', $birthDateParsed->format('Y-m-d'))
-            ->orderByDesc('created_at');
+        // Buscar por CPF e data de nascimento do COMPRADOR (buyer) no gateway_payload
+        // O comprador pode ter comprado ingressos para outras pessoas
+        // Buscar todas as registrations e filtrar pelo gateway_payload em PHP
+        $allRegistrations = Registration::with('event')
+            ->orderByDesc('created_at')
+            ->get()
+            ->filter(function ($registration) use ($cpf, $birthDateParsed) {
+                $gatewayPayload = $registration->gateway_payload;
+                if (!is_array($gatewayPayload) || !isset($gatewayPayload['buyer'])) {
+                    return false;
+                }
+                
+                $buyer = $gatewayPayload['buyer'];
+                $buyerCpf = preg_replace('/\D/', '', $buyer['cpf'] ?? '');
+                $buyerBirthDate = $buyer['birth_date'] ?? null;
+                
+                if ($buyerCpf !== $cpf) {
+                    return false;
+                }
+                
+                if (!$buyerBirthDate) {
+                    return false;
+                }
+                
+                try {
+                    $buyerBirthDateParsed = \Carbon\Carbon::parse($buyerBirthDate);
+                    return $buyerBirthDateParsed->format('Y-m-d') === $birthDateParsed->format('Y-m-d');
+                } catch (\Exception $e) {
+                    return false;
+                }
+            });
+        
+        // Criar uma query baseada nos IDs filtrados
+        $filteredIds = $allRegistrations->pluck('id')->toArray();
+        
+        if (empty($filteredIds)) {
+            // Se não encontrou nenhuma, retornar query vazia
+            $query = Registration::with('event')->whereRaw('1 = 0');
+        } else {
+            $query = Registration::with('event')
+                ->whereIn('id', $filteredIds)
+                ->orderByDesc('created_at');
+        }
 
         // Se não agrupar, retornar lista simples
         if (!$groupByPayment) {
@@ -645,11 +724,16 @@ class RegistrationController extends Controller
         }
 
         // Agrupar por pagamento
-        $allRegistrations = $query->get();
+        // Se já temos os IDs filtrados, usar eles diretamente
+        if (empty($filteredIds)) {
+            $allRegistrations = collect([]);
+        } else {
+            $allRegistrations = $query->get();
+        }
 
         if ($allRegistrations->isEmpty()) {
             return response()->json([
-                'message' => 'Nenhuma inscrição encontrada para este CPF e data de nascimento.'
+                'message' => 'Nenhuma inscrição encontrada para este CPF e data de nascimento do comprador.'
             ], 404);
         }
 
@@ -718,7 +802,7 @@ class RegistrationController extends Controller
                         'name' => $reg->name,
                         'phone' => $reg->phone,
                         'cpf' => $reg->cpf,
-                        'birth_date' => $reg->birth_date?->format('Y-m-d'),
+                        'birth_date' => $reg->birth_date ? ($reg->birth_date instanceof \Carbon\Carbon ? $reg->birth_date->format('Y-m-d') : $reg->birth_date) : null,
                         'sector' => $reg->sector,
                         'congregation' => $reg->congregation,
                         'church_type' => $reg->church_type,
@@ -727,15 +811,15 @@ class RegistrationController extends Controller
                         'price_paid_formatted' => number_format($reg->price_paid / 100, 2, ',', '.'),
                         'payment_status' => $reg->payment_status,
                         'validated' => $reg->validated,
-                        'validated_at' => $reg->validated_at?->toIso8601String(),
+                        'validated_at' => $reg->validated_at ? ($reg->validated_at instanceof \Carbon\Carbon ? $reg->validated_at->toIso8601String() : $reg->validated_at) : null,
                         'validated_by' => $reg->validated_by,
                         'asaas_payment_id' => $reg->asaas_payment_id,
                         'event' => $reg->event ? [
                             'id' => $reg->event->id,
                             'name' => $reg->event->name,
                             'description' => $reg->event->description,
-                            'start_date' => $reg->event->start_date?->format('Y-m-d'),
-                            'end_date' => $reg->event->end_date?->format('Y-m-d'),
+                            'start_date' => $reg->event->start_date ? ($reg->event->start_date instanceof \Carbon\Carbon ? $reg->event->start_date->format('Y-m-d') : $reg->event->start_date) : null,
+                            'end_date' => $reg->event->end_date ? ($reg->event->end_date instanceof \Carbon\Carbon ? $reg->event->end_date->format('Y-m-d') : $reg->event->end_date) : null,
                             'price' => $reg->event->price,
                             'image' => $reg->event->image,
                         ] : null,

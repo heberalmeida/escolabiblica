@@ -3,12 +3,19 @@
     <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
       <h1 class="text-2xl font-bold text-gray-800">Inscrições</h1>
       <div class="flex gap-4 flex-wrap">
-        <select v-model="selectedEventId" @change="loadRegistrations"
+        <input 
+          v-model="searchName" 
+          @input="debouncedLoad"
+          type="text" 
+          :placeholder="activeTab === 'registrations' ? 'Buscar por nome da inscrição...' : 'Buscar por nome do comprador...'"
+          class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select v-model="selectedEventId" @change="handleEventChange"
           class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">Todos os Eventos</option>
           <option v-for="event in events" :key="event.id" :value="event.id">{{ event.name }}</option>
         </select>
-        <select v-model="selectedStatus" @change="filterByStatus"
+        <select v-model="selectedStatus" @change="handleStatusChange"
           class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">Todos os Status</option>
           <option value="pending">Pendente</option>
@@ -19,6 +26,111 @@
         </select>
       </div>
     </div>
+
+    <!-- Tabs para alternar entre Inscrições e Pedidos -->
+    <div class="flex gap-2 mb-6 border-b border-gray-200">
+      <button
+        type="button"
+        @click="activeTab = 'registrations'"
+        class="px-4 py-2 text-sm font-medium transition"
+        :class="activeTab === 'registrations' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'">
+        Inscrições
+      </button>
+      <button
+        type="button"
+        @click="activeTab = 'orders'"
+        class="px-4 py-2 text-sm font-medium transition"
+        :class="activeTab === 'orders' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'">
+        Pedidos
+      </button>
+    </div>
+
+    <!-- Conteúdo de Pedidos -->
+    <div v-if="activeTab === 'orders'">
+      <div v-if="loadingOrders" class="flex justify-center py-10">
+        <div class="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+
+      <div v-else>
+        <div class="overflow-x-auto">
+          <table class="min-w-full bg-white border border-gray-200 rounded-lg">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Pedido</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comprador</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inscrições</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Método</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr v-for="order in orders" :key="order.id"
+                class="hover:bg-gray-50 transition">
+                <td class="px-4 py-3 text-sm font-mono text-gray-900">
+                  {{ order.payment_id || order.id || '-' }}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900">
+                  <div v-if="order.buyer">
+                    <div class="font-medium">{{ order.buyer.name || '-' }}</div>
+                    <div class="text-xs text-gray-500">{{ order.buyer.cpf || '' }}</div>
+                  </div>
+                  <span v-else>-</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  {{ order.registrations_count || order.registrations?.length || 0 }} ingresso(s)
+                  <div v-if="order.registrations && order.registrations.length > 0" class="text-xs text-gray-500 mt-1">
+                    <div v-for="reg in order.registrations.slice(0, 3)" :key="reg.id">
+                      • {{ reg.name }} - {{ reg.event?.name || 'Evento' }}
+                    </div>
+                    <div v-if="order.registrations.length > 3" class="text-gray-400">
+                      ... e mais {{ order.registrations.length - 3 }}
+                    </div>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-sm font-semibold text-blue-600">
+                  {{ formatBRL(order.total_amount || 0) }}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  {{ formatPaymentMethod(order.payment_method) }}
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <span class="px-2 py-1 rounded text-xs font-medium" :class="getStatusClass(order.payment_status)">
+                    {{ getStatusLabel(order.payment_status) }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">{{ formatDate(order.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Paginação de Pedidos -->
+        <div v-if="ordersPagination && ordersPagination.total > ordersPagination.per_page" class="mt-6 flex items-center justify-between">
+          <div class="text-sm text-gray-700">
+            Mostrando {{ ordersPagination.from }} a {{ ordersPagination.to }} de {{ ordersPagination.total }} pedidos
+          </div>
+          <div class="flex gap-2">
+            <button v-if="ordersPagination.current_page > 1" @click="changeOrdersPage(ordersPagination.current_page - 1)"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+              Anterior
+            </button>
+            <button v-if="ordersPagination.current_page < ordersPagination.last_page" @click="changeOrdersPage(ordersPagination.current_page + 1)"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+              Próxima
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!loadingOrders && orders.length === 0" class="text-center py-10 text-gray-500">
+        Nenhum pedido encontrado.
+      </div>
+    </div>
+
+    <!-- Conteúdo de Inscrições -->
+    <div v-if="activeTab === 'registrations'">
 
     <div v-if="loading" class="flex justify-center py-10">
       <div class="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -99,30 +211,49 @@
       </div>
     </div>
 
-    <div v-if="!loading && registrations.length === 0" class="text-center py-10 text-gray-500">
-      Nenhuma inscrição encontrada.
+      <div v-if="!loading && registrations.length === 0" class="text-center py-10 text-gray-500">
+        Nenhuma inscrição encontrada.
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { registrationsApi, eventsApi } from '@/api/events'
 import { FontAwesomeIcon } from '@/plugins/fontawesome'
 import { useCurrency } from '@/composables/useCurrency'
+import { useDebounce } from '@/composables/useDebounce'
 
 const { formatBRL } = useCurrency()
+const debouncedLoad = useDebounce(() => {
+  if (activeTab.value === 'registrations') {
+    loadRegistrations(pagination.value?.current_page || 1)
+  } else {
+    loadOrders(ordersPagination.value?.current_page || 1)
+  }
+}, 500)
 
+const activeTab = ref('registrations') // 'registrations' ou 'orders'
 const registrations = ref([])
 const allRegistrations = ref([])
 const events = ref([])
 const loading = ref(true)
 const selectedEventId = ref('')
 const selectedStatus = ref('')
+const searchName = ref('')
 const pagination = ref(null)
+
+// Pedidos
+const orders = ref([])
+const loadingOrders = ref(false)
+const ordersPagination = ref(null)
 
 onMounted(async () => {
   await Promise.all([loadEvents(), loadRegistrations()])
+  if (activeTab.value === 'orders') {
+    await loadOrders()
+  }
 })
 
 async function loadEvents() {
@@ -151,6 +282,10 @@ async function loadRegistrations(page = 1) {
     
     if (selectedEventId.value) {
       params.event_id = selectedEventId.value
+    }
+
+    if (searchName.value && searchName.value.trim()) {
+      params.name = searchName.value.trim()
     }
 
     const response = await registrationsApi.list(params)
@@ -236,6 +371,22 @@ function changePage(page) {
   loadRegistrations(page)
 }
 
+function handleEventChange() {
+  if (activeTab.value === 'registrations') {
+    loadRegistrations(1)
+  } else {
+    loadOrders(1)
+  }
+}
+
+function handleStatusChange() {
+  if (activeTab.value === 'registrations') {
+    filterByStatus()
+  } else {
+    loadOrders(1)
+  }
+}
+
 function filterByStatus() {
   if (!selectedStatus.value) {
     registrations.value = allRegistrations.value
@@ -286,4 +437,75 @@ function getPriceColor(price) {
   if (price === 0) return 'text-green-600'
   return 'text-blue-600'
 }
+
+// Funções para Pedidos
+async function loadOrders(page = 1) {
+  try {
+    loadingOrders.value = true
+    const params = {
+      per_page: 15,
+      page,
+      group_by_payment: true, // Agrupar por pagamento para mostrar pedidos
+    }
+    
+    if (selectedEventId.value) {
+      params.event_id = selectedEventId.value
+    }
+
+    if (selectedStatus.value) {
+      // Filtrar por status do pagamento
+      params.payment_status = selectedStatus.value
+    }
+
+    if (searchName.value && searchName.value.trim()) {
+      // Buscar por nome do comprador na aba de pedidos
+      params.buyer_name = searchName.value.trim()
+    }
+
+    const response = await registrationsApi.list(params)
+    
+    if (response.data) {
+      if (Array.isArray(response.data)) {
+        orders.value = response.data
+        ordersPagination.value = null
+      } else if (response.data.data) {
+        orders.value = response.data.data
+        ordersPagination.value = {
+          current_page: response.data.current_page,
+          last_page: response.data.last_page,
+          per_page: response.data.per_page,
+          total: response.data.total,
+          from: response.data.from || ((response.data.current_page - 1) * response.data.per_page + 1),
+          to: response.data.to || Math.min(response.data.current_page * response.data.per_page, response.data.total),
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao carregar pedidos:', error)
+    alert('Erro ao carregar pedidos: ' + (error.response?.data?.message || error.message))
+  } finally {
+    loadingOrders.value = false
+  }
+}
+
+function changeOrdersPage(page) {
+  loadOrders(page)
+}
+
+function formatPaymentMethod(method) {
+  const methods = {
+    'PIX': 'PIX',
+    'BOLETO': 'Boleto',
+    'CREDIT_CARD': 'Cartão de Crédito',
+    'FREE': 'Gratuito',
+  }
+  return methods[method] || method || '-'
+}
+
+// Observar mudanças de tab
+watch(activeTab, (newTab) => {
+  if (newTab === 'orders' && orders.value.length === 0) {
+    loadOrders()
+  }
+})
 </script>

@@ -54,6 +54,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { eventsApi } from '@/api/events'
 import { FontAwesomeIcon } from '@/plugins/fontawesome'
 import { useCartStore } from '@/stores/cart.store'
@@ -118,5 +119,6 @@ function getImageUrl(path) {
 function addToCart(event) {
   cart.addEvent(event, 1)
   toastRef.value?.open(`${event.name} adicionado ao carrinho!`, 'success')
+  router.push('/cart')
 }
 </script>

@@ -275,6 +275,7 @@ class CheckoutController extends Controller
         $baseRules = [
             'buyer.name'            => 'required|string|max:255',
             'buyer.cpf'             => 'required|string|max:14',
+            'buyer.birth_date'      => 'required|date',
             'buyer.email'           => 'nullable|email',
             'buyer.phone'           => 'nullable|string|max:20',
             'events'                => 'required|array|min:1',
@@ -285,9 +286,12 @@ class CheckoutController extends Controller
             'events.*.registrations.*.phone' => 'required|string|max:20',
             'events.*.registrations.*.cpf' => 'nullable|string|max:14',
             'events.*.registrations.*.birth_date' => 'required|date',
+            'events.*.registrations.*.church_affiliation' => 'required|in:ASSEMBLEIA,OUTRA_IGREJA,NAO_EVANGELICO',
+            'events.*.registrations.*.other_church_name' => 'nullable|string|max:255',
             'events.*.registrations.*.sector' => 'nullable|string|max:10',
             'events.*.registrations.*.congregation' => 'nullable|string|max:255',
             'events.*.registrations.*.church_type' => 'nullable|string|max:255',
+            'events.*.registrations.*.position' => 'nullable|string|max:255',
             'events.*.registrations.*.gender' => 'required|in:MASCULINO,FEMININO',
             'events.*.registrations.*.whatsapp_authorization' => 'nullable|boolean',
             'payment.method'        => 'required|in:BOLETO,PIX,CREDIT_CARD,FREE',
@@ -327,7 +331,9 @@ class CheckoutController extends Controller
 
             // Processar cada evento
             foreach ($data['events'] as $eventData) {
-                $event = Event::with('paymentMethods')->findOrFail($eventData['event_id']);
+                $event = Event::with(['paymentMethods' => function ($query) {
+                    $query->where('active', true);
+                }])->findOrFail($eventData['event_id']);
 
                 // Validar se o evento ainda aceita inscrições
                 $today = now()->format('Y-m-d');
@@ -342,9 +348,75 @@ class CheckoutController extends Controller
                 $eventTotal = $event->price * count($eventData['registrations']);
                 $totalAmount += $eventTotal;
 
+                // Validar métodos de pagamento ativos do evento
+                $allowedMethods = $event->paymentMethods()->where('active', true)->pluck('method')->toArray();
+                if ($data['payment']['method'] !== 'FREE' && !in_array($data['payment']['method'], $allowedMethods)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'payment.method' => ['Método de pagamento não disponível para este evento.'],
+                    ]);
+                }
+
+                // Validar nomes e telefones únicos
+                $names = [];
+                $phones = [];
+                foreach ($eventData['registrations'] as $regData) {
+                    $name = trim(strtolower($regData['name'] ?? ''));
+                    $phone = preg_replace('/\D/', '', $regData['phone'] ?? '');
+                    
+                    if (!empty($name) && in_array($name, $names)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'events' => ['Não é permitido ter nomes iguais entre os ingressos.'],
+                        ]);
+                    }
+                    if (!empty($phone) && in_array($phone, $phones)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'events' => ['Não é permitido ter telefones iguais entre os ingressos.'],
+                        ]);
+                    }
+                    
+                    $names[] = $name;
+                    $phones[] = $phone;
+                }
+
                 // Criar registrations para este evento
                 foreach ($eventData['registrations'] as $regData) {
                     $cpf = !empty($regData['cpf']) ? preg_replace('/\D/', '', $regData['cpf']) : null;
+                    
+                    // Validar campos condicionais
+                    $churchAffiliation = $regData['church_affiliation'] ?? null;
+                    if ($churchAffiliation === 'ASSEMBLEIA') {
+                        if (empty($regData['sector'])) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'events' => ['Setor é obrigatório para Assembleia de Deus Missões de Campo Grande.'],
+                            ]);
+                        }
+                        if (empty($regData['congregation'])) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'events' => ['Congregação é obrigatória para Assembleia de Deus Missões de Campo Grande.'],
+                            ]);
+                        }
+                        if (empty($regData['church_type'])) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'events' => ['Tipo é obrigatório para Assembleia de Deus Missões de Campo Grande.'],
+                            ]);
+                        }
+                        if ($regData['church_type'] === 'OUTRO' && empty($regData['position'])) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'events' => ['Cargo é obrigatório quando tipo é "Outro".'],
+                            ]);
+                        }
+                    } elseif ($churchAffiliation === 'OUTRA_IGREJA') {
+                        if (empty($regData['other_church_name'])) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'events' => ['Nome da igreja é obrigatório quando selecionar "De outra igreja".'],
+                            ]);
+                        }
+                        if (!empty($regData['church_type']) && $regData['church_type'] === 'OUTRO' && empty($regData['position'])) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'events' => ['Cargo é obrigatório quando tipo é "Outro".'],
+                            ]);
+                        }
+                    }
                     
                     $registration = Registration::create([
                         'event_id' => $event->id,
@@ -352,9 +424,12 @@ class CheckoutController extends Controller
                         'phone' => $regData['phone'],
                         'cpf' => $cpf,
                         'birth_date' => $regData['birth_date'],
-                        'sector' => $regData['sector'] ?? null,
-                        'congregation' => $regData['congregation'] ?? null,
-                        'church_type' => $regData['church_type'] ?? null,
+                        'church_affiliation' => $churchAffiliation,
+                        'other_church_name' => $churchAffiliation === 'OUTRA_IGREJA' ? ($regData['other_church_name'] ?? null) : null,
+                        'sector' => $churchAffiliation === 'ASSEMBLEIA' ? ($regData['sector'] ?? null) : null,
+                        'congregation' => $churchAffiliation === 'ASSEMBLEIA' ? ($regData['congregation'] ?? null) : null,
+                        'church_type' => ($churchAffiliation === 'ASSEMBLEIA' || $churchAffiliation === 'OUTRA_IGREJA') ? ($regData['church_type'] ?? null) : null,
+                        'position' => (($churchAffiliation === 'ASSEMBLEIA' || $churchAffiliation === 'OUTRA_IGREJA') && ($regData['church_type'] ?? '') === 'OUTRO') ? ($regData['position'] ?? null) : null,
                         'gender' => $regData['gender'],
                         'whatsapp_authorization' => $regData['whatsapp_authorization'] ?? false,
                         'price_paid' => $event->price,
@@ -372,6 +447,15 @@ class CheckoutController extends Controller
                     $registration->update([
                         'payment_status' => 'paid',
                         'price_paid' => 0,
+                        'gateway_payload' => [
+                            'buyer' => [
+                                'name' => $data['buyer']['name'],
+                                'cpf' => $data['buyer']['cpf'],
+                                'birth_date' => $data['buyer']['birth_date'],
+                                'email' => $data['buyer']['email'] ?? null,
+                                'phone' => $data['buyer']['phone'] ?? null,
+                            ],
+                        ],
                     ]);
                 }
 
@@ -516,13 +600,21 @@ class CheckoutController extends Controller
             // Atualizar registrations com payment_id e price_paid proporcional
             if (isset($charge['id'])) {
                 foreach ($allRegistrations as $registration) {
+                    $gatewayPayload = array_merge($charge, [
+                        'appliedFixTax' => $fixCents / 100,
+                        'appliedPercentTax' => $percent,
+                        'buyer' => [
+                            'name' => $data['buyer']['name'],
+                            'cpf' => $data['buyer']['cpf'],
+                            'birth_date' => $data['buyer']['birth_date'],
+                            'email' => $data['buyer']['email'] ?? null,
+                            'phone' => $data['buyer']['phone'] ?? null,
+                        ],
+                    ]);
                     $registration->update([
                         'asaas_customer_id' => $customer['id'] ?? null,
                         'asaas_payment_id' => $charge['id'],
-                        'gateway_payload' => array_merge($charge, [
-                            'appliedFixTax' => $fixCents / 100,
-                            'appliedPercentTax' => $percent,
-                        ]),
+                        'gateway_payload' => $gatewayPayload,
                         'price_paid' => $pricePerRegistrationCents, // Valor proporcional com taxas
                     ]);
                 }
