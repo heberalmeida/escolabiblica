@@ -425,6 +425,8 @@ async function printOrder(order) {
     return
   }
   
+  console.log('Imprimindo pedido:', order.payment_id, 'com', paidRegs.length, 'inscrições')
+  
   // Gerar todos os QR codes como imagens base64 antes de abrir a janela
   const qrCodeImages = {}
   for (const reg of paidRegs) {
@@ -440,7 +442,12 @@ async function printOrder(order) {
     }
   }
   
-  const printWindow = window.open('', '_blank')
+  const printWindow = window.open('', '_blank', 'width=800,height=600')
+  if (!printWindow) {
+    alert('Por favor, permita pop-ups para imprimir as inscrições.')
+    return
+  }
+  
   const printedDate = new Date().toLocaleString('pt-BR')
   const totalAmount = formatBRL(order.total_amount || 0)
   const registrationsCount = order.registrations_count || registrations.length
@@ -518,10 +525,20 @@ async function printOrder(order) {
   printWindow.document.write(htmlContent)
   printWindow.document.close()
   
-  printWindow.onload = () => {
+  // Aguardar o carregamento completo antes de imprimir
+  const printAfterLoad = () => {
     setTimeout(() => {
+      printWindow.focus()
       printWindow.print()
-    }, 300)
+    }, 500)
+  }
+  
+  if (printWindow.document.readyState === 'complete') {
+    printAfterLoad()
+  } else {
+    printWindow.addEventListener('load', printAfterLoad, { once: true })
+    // Fallback caso o evento load não dispare
+    setTimeout(printAfterLoad, 1000)
   }
 }
 
@@ -761,6 +778,19 @@ function formatDateTime(date) {
 function formatCpf(cpf) {
   if (!cpf) return ''
   return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+}
+
+function formatPhone(phone) {
+  if (!phone) return ''
+  // Remove todos os caracteres não numéricos
+  const cleaned = phone.replace(/\D/g, '')
+  // Formata como (XX) XXXXX-XXXX para 11 dígitos ou (XX) XXXX-XXXX para 10 dígitos
+  if (cleaned.length === 11) {
+    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+  } else if (cleaned.length === 10) {
+    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+  }
+  return phone
 }
 
 function formatBRL(cents) {
