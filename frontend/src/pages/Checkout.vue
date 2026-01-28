@@ -40,7 +40,7 @@
           </li>
         </ul>
 
-        <Form :validation-schema="schema" @submit="onSubmit" v-slot="{ errors, values, setFieldValue, validate, meta, setErrors, setTouched, handleSubmit: formHandleSubmit }" :initial-values="getInitialValues()" :validate-on-mount="false" :validate-on-blur="false" :validate-on-change="false">
+        <Form :validation-schema="schema" @submit="onSubmit" v-slot="{ errors, values, setFieldValue, validate, meta, setErrors, setTouched, setFieldError, handleSubmit: formHandleSubmit }" :initial-values="getInitialValues()" :validate-on-mount="false" :validate-on-blur="true" :validate-on-change="true" :keep-values-on-unmount="true">
           <!-- Informação sobre Eventos -->
           <div v-if="cart.eventItems.length > 0" class="mb-6">
             <div v-for="(eventItem, eventIndex) in cart.eventItems" :key="eventItem.eventId" class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -74,11 +74,15 @@
               <div>
                 <label class="block text-sm font-medium mb-1">CPF *</label>
                 <Field name="cpf" v-slot="{ field, meta }">
-                  <input v-bind="field" v-maska="'###.###.###-##'"
+                  <input 
+                    v-bind="field" 
+                    v-maska="'###.###.###-##'"
+                    @blur="field.onBlur"
+                    @input="field.onChange"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
                     :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
-                <ErrorMessage name="cpf" class="text-red-600 text-xs mt-1" />
+                <ErrorMessage name="cpf" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <div>
@@ -88,30 +92,40 @@
                     v-bind="field"
                     v-maska="'##/##/####'"
                     placeholder="DD/MM/AAAA"
+                    @blur="field.onBlur"
+                    @input="field.onChange"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
                     :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
-                <ErrorMessage name="birth_date" class="text-red-600 text-xs mt-1" />
+                <ErrorMessage name="birth_date" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <div>
                 <label class="block text-sm font-medium mb-1">Telefone *</label>
                 <Field name="phone" v-slot="{ field, meta }">
-                  <input v-bind="field" v-maska="'(##) #####-####'"
+                  <input 
+                    v-bind="field" 
+                    v-maska="'(##) #####-####'"
+                    @blur="field.onBlur"
+                    @input="field.onChange"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
                     :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
-                <ErrorMessage name="phone" class="text-red-600 text-xs mt-1" />
+                <ErrorMessage name="phone" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                 <label class="block text-sm font-medium mb-1">Email *</label>
                 <Field name="email" v-slot="{ field, meta }">
-                  <input type="email" v-bind="field"
+                  <input 
+                    type="email" 
+                    v-bind="field"
+                    @blur="field.onBlur"
+                    @input="field.onChange"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
                     :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
                 </Field>
-                <ErrorMessage name="email" class="text-red-600 text-xs mt-1" />
+                <ErrorMessage name="email" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <!-- Campos para ingressos de eventos -->
@@ -903,14 +917,23 @@ function getInitialValues() {
 function validateCPF(v) {
   if (!v) return false
   const s = v.replace(/\D/g, '')
-  if (s.length !== 11 || /^(\d)\1+$/.test(s)) return false
+  // Verificar se tem 11 dígitos
+  if (s.length !== 11) return false
+  // Verificar se não são todos iguais (ex: 111.111.111-11)
+  if (/^(\d)\1+$/.test(s)) return false
+  // Validar dígitos verificadores
   let sum = 0
-  for (let i = 0; i < 9; i++) sum += parseInt(s.charAt(i)) * (10 - i)
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(s.charAt(i)) * (10 - i)
+  }
   let rev = 11 - (sum % 11)
   rev = rev >= 10 ? 0 : rev
   if (rev !== parseInt(s.charAt(9))) return false
+  
   sum = 0
-  for (let i = 0; i < 10; i++) sum += parseInt(s.charAt(i)) * (11 - i)
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(s.charAt(i)) * (11 - i)
+  }
   rev = 11 - (sum % 11)
   rev = rev >= 10 ? 0 : rev
   return rev === parseInt(s.charAt(10))
@@ -921,10 +944,48 @@ const total = computed(() => cart.items.reduce((s, i) => s + i.price * i.quantit
 const schema = computed(() => {
   const baseSchema = {
     name: yup.string().required('Nome é obrigatório'),
-    cpf: yup.string().required('CPF é obrigatório').test('cpf', 'CPF inválido', v => validateCPF(v)),
-    birth_date: yup.string().required('Data de nascimento é obrigatória').matches(/^\d{2}\/\d{2}\/\d{4}$/, 'Data inválida. Use o formato DD/MM/AAAA'),
-    email: yup.string().email('Email inválido').required('Email é obrigatório'),
-    phone: yup.string().required('Telefone é obrigatório'),
+    cpf: yup.string()
+      .required('CPF é obrigatório')
+      .test('cpf', 'CPF inválido', function(value) {
+        if (!value) return false
+        const cleaned = value.replace(/\D/g, '')
+        // Se ainda está digitando (menos de 11 dígitos), não validar ainda
+        if (cleaned.length < 11) return true
+        if (cleaned.length !== 11) return false
+        return validateCPF(value)
+      }),
+    birth_date: yup.string()
+      .required('Data de nascimento é obrigatória')
+      .test('date-format', 'Data inválida. Use o formato DD/MM/AAAA', function(value) {
+        if (!value) return false
+        // Se ainda está digitando (menos de 10 caracteres), não validar ainda
+        if (value.length < 10) return true
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false
+        return true
+      })
+      .test('date-valid', 'Data inválida', function(value) {
+        if (!value || !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false
+        const [day, month, year] = value.split('/').map(Number)
+        if (month < 1 || month > 12) return false
+        if (day < 1 || day > 31) return false
+        if (year < 1900 || year > new Date().getFullYear()) return false
+        const date = new Date(year, month - 1, day)
+        return date.getFullYear() === year && 
+               date.getMonth() === month - 1 && 
+               date.getDate() === day
+      }),
+    email: yup.string()
+      .required('Email é obrigatório')
+      .email('Email inválido'),
+    phone: yup.string()
+      .required('Telefone é obrigatório')
+      .test('phone-format', 'Telefone deve ter 10 ou 11 dígitos', function(value) {
+        if (!value) return false
+        const cleaned = value.replace(/\D/g, '')
+        // Se ainda está digitando (menos de 10 dígitos), não validar ainda
+        if (cleaned.length < 10) return true
+        return cleaned.length >= 10 && cleaned.length <= 11
+      }),
     method: yup.string().oneOf(['PIX', 'BOLETO', 'CREDIT_CARD', 'FREE'], 'Selecione um método').required('Selecione um método').test('available-method', 'Método de pagamento não disponível para este evento', function(value) {
       if (!value) return true
       if (cart.eventItems.length === 0) return true
@@ -982,8 +1043,31 @@ const schema = computed(() => {
         registrations: yup.array().of(
           yup.object({
             name: yup.string().required('Nome completo é obrigatório').min(3, 'Nome deve ter pelo menos 3 caracteres'),
-            phone: yup.string().required('Telefone é obrigatório'),
-            birth_date: yup.string().required('Data de nascimento é obrigatória').matches(/^\d{2}\/\d{2}\/\d{4}$/, 'Data inválida. Use o formato DD/MM/AAAA'),
+            phone: yup.string()
+              .required('Telefone é obrigatório')
+              .test('phone-format', 'Telefone deve ter 10 ou 11 dígitos', function(value) {
+                if (!value) return false
+                const cleaned = value.replace(/\D/g, '')
+                // Se ainda está digitando (menos de 10 dígitos), não validar ainda
+                if (cleaned.length < 10) return true
+                return cleaned.length >= 10 && cleaned.length <= 11
+              }),
+            birth_date: yup.string()
+              .required('Data de nascimento é obrigatória')
+              .test('date-format', 'Data inválida. Use o formato DD/MM/AAAA', function(value) {
+                if (!value) return false
+                // Se ainda está digitando (menos de 10 caracteres), não validar ainda
+                if (value.length < 10) return true
+                if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false
+                const [day, month, year] = value.split('/').map(Number)
+                if (month < 1 || month > 12) return false
+                if (day < 1 || day > 31) return false
+                if (year < 1900 || year > new Date().getFullYear()) return false
+                const date = new Date(year, month - 1, day)
+                return date.getFullYear() === year && 
+                       date.getMonth() === month - 1 && 
+                       date.getDate() === day
+              }),
             gender: yup.string().required('Gênero é obrigatório'),
             church_affiliation: yup.string().required('Afiliação é obrigatória').oneOf(['ASSEMBLEIA', 'OUTRA_IGREJA', 'NAO_EVANGELICO'], 'Selecione uma afiliação válida'),
             other_church_name: yup.string().when('church_affiliation', {
@@ -1350,56 +1434,124 @@ async function handleSubmit(event, { setTouched, errors, values, formHandleSubmi
     setTouched(field, true)
   })
 
+  // Aguardar um momento para o vee-validate processar
+  await new Promise(resolve => setTimeout(resolve, 50))
+
   // Validar todos os campos usando o vee-validate
   const validationResult = await validate()
 
-  // Aguardar um momento para o vee-validate processar e atualizar os erros
-  await new Promise(resolve => setTimeout(resolve, 100))
+  // Aguardar mais um momento para o vee-validate atualizar o objeto errors
+  await new Promise(resolve => setTimeout(resolve, 200))
 
-  // Verificar se há erros
-  const hasErrors = !validationResult.valid
+  // Verificar se há erros - confiar principalmente no objeto errors do vee-validate
+  const errorKeys = []
+  
+  // Coletar erros do objeto errors (fonte mais confiável e atualizada)
+  Object.keys(errors).forEach(key => {
+    if (errors[key]) {
+      errorKeys.push(key)
+    }
+  })
+  
+  // Se não encontrou erros no objeto errors, verificar no validationResult
+  if (errorKeys.length === 0 && validationResult && validationResult.errors) {
+    Object.keys(validationResult.errors).forEach(key => {
+      if (validationResult.errors[key] && !errorKeys.includes(key)) {
+        errorKeys.push(key)
+      }
+    })
+  }
+
+  // Só bloquear se realmente houver erros no objeto errors
+  // O validationResult.valid pode ser false mesmo sem erros explícitos
+  const hasErrors = errorKeys.length > 0
 
   if (hasErrors) {
-    // Procurar o primeiro campo com erro
-    const errorKeys = Object.keys(errors).filter(key => errors[key])
-    if (errorKeys.length === 0 && validationResult.errors) {
-      errorKeys.push(...Object.keys(validationResult.errors))
-    }
+    console.log('Erros encontrados:', {
+      errorKeys,
+      validationResultValid: validationResult?.valid,
+      validationResultErrors: validationResult?.errors,
+      errorsObject: errors,
+      errorKeysCount: errorKeys.length
+    })
 
     // Fazer scroll para o primeiro erro
     setTimeout(() => {
       if (errorKeys.length > 0) {
         const firstErrorKey = errorKeys[0]
-        const firstErrorField = document.querySelector(`[name="${firstErrorKey}"]`) ||
-                               document.querySelector(`input[name*="${firstErrorKey.split('.').pop()}"]`) ||
-                               document.querySelector(`select[name*="${firstErrorKey.split('.').pop()}"]`) ||
-                               document.querySelector('.border-red-600')
-        if (firstErrorField) {
-          firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          if (firstErrorField.focus) {
-            firstErrorField.focus()
+        console.log('Primeiro erro:', firstErrorKey)
+        
+        // Tentar encontrar o campo de várias formas
+        let firstErrorField = document.querySelector(`[name="${firstErrorKey}"]`)
+        
+        if (!firstErrorField) {
+          // Tentar com notação de array escapada
+          const arrayKey = firstErrorKey.replace(/\[/g, '\\[').replace(/\]/g, '\\]')
+          firstErrorField = document.querySelector(`[name="${arrayKey}"]`)
+        }
+        
+        if (!firstErrorField) {
+          // Tentar com o último segmento do nome
+          const lastSegment = firstErrorKey.split('.').pop() || firstErrorKey.split('[').pop()?.split(']')[0]
+          if (lastSegment) {
+            firstErrorField = document.querySelector(`input[name*="${lastSegment}"]`) ||
+                             document.querySelector(`select[name*="${lastSegment}"]`)
           }
         }
+        
+        if (!firstErrorField) {
+          // Fallback: procurar qualquer campo com erro visual
+          firstErrorField = document.querySelector('.border-red-600')
+        }
+        
+        if (firstErrorField) {
+          firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setTimeout(() => {
+            if (firstErrorField.focus) {
+              firstErrorField.focus()
+            }
+          }, 300)
+        }
       } else {
-        // Fallback: procurar qualquer campo com erro
+        // Fallback: procurar qualquer campo com erro visual
         const errorField = document.querySelector('.border-red-600')
         if (errorField) {
           errorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          if (errorField.focus) {
-            errorField.focus()
-          }
+          setTimeout(() => {
+            if (errorField.focus) {
+              errorField.focus()
+            }
+          }, 300)
         }
       }
 
-      toastRef.value.open('Por favor, preencha todos os campos obrigatórios corretamente.', 'error')
-    }, 100)
+      const errorMessage = errorKeys.length > 0 
+        ? `Por favor, corrija os erros nos campos. ${errorKeys.length} campo(s) com erro: ${errorKeys.slice(0, 3).join(', ')}${errorKeys.length > 3 ? '...' : ''}`
+        : 'Por favor, preencha todos os campos obrigatórios corretamente.'
+      toastRef.value.open(errorMessage, 'error')
+    }, 200)
 
     return
   }
 
-  // Se não houver erros, submeter usando o handleSubmit do vee-validate
-  // Isso vai validar novamente e chamar onSubmit se passar
-  formHandleSubmit()
+  // Se não houver erros, chamar onSubmit diretamente
+  // Já validamos tudo antes, então podemos chamar onSubmit diretamente
+  console.log('Nenhum erro encontrado, submetendo formulário...', {
+    validationResultValid: validationResult?.valid,
+    errorKeysCount: errorKeys.length,
+    errorsObjectKeys: Object.keys(errors).filter(k => errors[k]),
+    hasErrors: hasErrors
+  })
+  
+  // Se não há erros, chamar onSubmit diretamente
+  // O formHandleSubmit pode estar fazendo validação adicional e bloqueando
+  if (!hasErrors) {
+    console.log('Chamando onSubmit diretamente pois não há erros...')
+    onSubmit(values)
+  } else {
+    // Se ainda houver erros, não fazer nada (já foi tratado acima)
+    console.log('Ainda há erros, não submetendo...')
+  }
 }
 
 async function onSubmit(vals) {

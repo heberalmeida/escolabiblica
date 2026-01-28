@@ -55,6 +55,7 @@ import {
   faMars,
   faVenus,
   faBuilding,
+  faCircleExclamation,
   } from '@fortawesome/free-solid-svg-icons'
 
 import { faPix } from '@fortawesome/free-brands-svg-icons'
@@ -115,6 +116,7 @@ library.add(
   faMars,
   faVenus,
   faBuilding,
+  faCircleExclamation,
 )
 
 export { FontAwesomeIcon }
