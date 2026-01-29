@@ -45,6 +45,7 @@ class AsaasService
             ->setMobilePhone($data['phone'] ?? null);
 
         // Adicionar endereço se disponível
+        // Nota: A classe Customer da biblioteca Asaas não suporta setCity() e setState()
         if (!empty($data['postalCode'])) {
             $c->setPostalCode($data['postalCode']);
             if (!empty($data['address'])) {
@@ -59,12 +60,8 @@ class AsaasService
             if (!empty($data['province'])) {
                 $c->setProvince($data['province']);
             }
-            if (!empty($data['city'])) {
-                $c->setCity($data['city']);
-            }
-            if (!empty($data['state'])) {
-                $c->setState($data['state']);
-            }
+            // City e State não são suportados pela biblioteca Asaas Customer
+            // Esses dados são armazenados apenas no banco de dados local
         }
 
         $resp = Asaas::customer()->create($c);
