@@ -63,9 +63,10 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                 <label class="block text-sm font-medium mb-1">Nome completo *</label>
-                <Field name="name" v-slot="{ field, meta }">
+                <Field name="name" v-slot="{ field }">
                   <input v-bind="field"
                     class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+                    :class="errors.name ? 'border-red-600' : 'border-gray-300'"
                      />
                 </Field>
                 <ErrorMessage name="name" class="text-red-600 text-xs mt-1" />
@@ -73,57 +74,61 @@
 
               <div>
                 <label class="block text-sm font-medium mb-1">CPF *</label>
-                <Field name="cpf" v-slot="{ field, meta }">
-                  <input 
-                    v-bind="field" 
+                <Field name="cpf" v-slot="{ field }">
+                  <input
+                    v-bind="field"
                     v-maska="'###.###.###-##'"
                     @blur="field.onBlur"
                     @input="field.onChange"
-                    class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                    class="w-full border px-3 py-2 rounded-lg transition"
+                    :class="errors.cpf ? 'border-red-600' : 'border-gray-300'"
+                     />
                 </Field>
                 <ErrorMessage name="cpf" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <div>
                 <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
-                <Field name="birth_date" v-slot="{ field, meta }">
+                <Field name="birth_date" v-slot="{ field }">
                   <input
                     v-bind="field"
                     v-maska="'##/##/####'"
                     placeholder="DD/MM/AAAA"
                     @blur="field.onBlur"
                     @input="field.onChange"
-                    class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                    class="w-full border px-3 py-2 rounded-lg transition"
+                    :class="errors.birth_date ? 'border-red-600' : 'border-gray-300'"
+                     />
                 </Field>
                 <ErrorMessage name="birth_date" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <div>
                 <label class="block text-sm font-medium mb-1">Telefone *</label>
-                <Field name="phone" v-slot="{ field, meta }">
-                  <input 
-                    v-bind="field" 
+                <Field name="phone" v-slot="{ field }">
+                  <input
+                    v-bind="field"
                     v-maska="'(##) #####-####'"
                     @blur="field.onBlur"
                     @input="field.onChange"
-                    class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                    class="w-full border px-3 py-2 rounded-lg transition"
+                    :class="errors.phone ? 'border-red-600' : 'border-gray-300'"
+                     />
                 </Field>
                 <ErrorMessage name="phone" class="text-red-600 text-xs mt-1 block" />
               </div>
 
               <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                 <label class="block text-sm font-medium mb-1">Email *</label>
-                <Field name="email" v-slot="{ field, meta }">
-                  <input 
-                    type="email" 
+                <Field name="email" v-slot="{ field }">
+                  <input
+                    type="email"
                     v-bind="field"
                     @blur="field.onBlur"
                     @input="field.onChange"
-                    class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                    class="w-full border px-3 py-2 rounded-lg transition"
+                    :class="errors.email ? 'border-red-600' : 'border-gray-300'"
+                     />
                 </Field>
                 <ErrorMessage name="email" class="text-red-600 text-xs mt-1 block" />
               </div>
@@ -160,36 +165,39 @@
                       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="col-span-1 sm:col-span-2">
                           <label class="block text-sm font-medium mb-1">Nome completo *</label>
-                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].name`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].name`" v-slot="{ field }">
                             <input
                               v-bind="field"
                               class="w-full border px-3 py-2 rounded-lg transition"
-                               :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                              :class="errors[`events[${eventIndex}].registrations[${regIndex}].name`] ? 'border-red-600' : 'border-gray-300'"
+                                />
                           </Field>
                           <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].name`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <div>
                           <label class="block text-sm font-medium mb-1">Telefone *</label>
-                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].phone`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].phone`" v-slot="{ field }">
                             <input
                               v-bind="field"
                               v-maska="'(##) #####-####'"
-                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                              class="w-full border px-3 py-2 rounded-lg transition"
+                              :class="errors[`events[${eventIndex}].registrations[${regIndex}].phone`] ? 'border-red-600' : 'border-gray-300'"
+                               />
                           </Field>
                           <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].phone`" class="text-red-600 text-xs mt-1" />
                         </div>
 
                         <div>
                           <label class="block text-sm font-medium mb-1">Data de Nascimento *</label>
-                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].birth_date`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].birth_date`" v-slot="{ field }">
                             <input
                               v-bind="field"
                               v-maska="'##/##/####'"
                               placeholder="DD/MM/AAAA"
-                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                              class="w-full border px-3 py-2 rounded-lg transition"
+                              :class="errors[`events[${eventIndex}].registrations[${regIndex}].birth_date`] ? 'border-red-600' : 'border-gray-300'"
+                               />
                           </Field>
                           <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].birth_date`" class="text-red-600 text-xs mt-1" />
                         </div>
@@ -215,7 +223,7 @@
 
                         <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                           <label class="block text-sm font-medium mb-1">Afiliação *</label>
-                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_affiliation`" v-slot="{ field, meta }">
+                          <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_affiliation`" v-slot="{ field }">
                             <select
                               v-bind="field"
                               @change="(e) => {
@@ -227,8 +235,9 @@
                                 setFieldValue(`events[${eventIndex}].registrations[${regIndex}].other_church_name`, '');
                               }"
                               @blur="field.onBlur"
-                              class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                              :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
+                              class="w-full border px-3 py-2 rounded-lg transition"
+                              :class="errors[`events[${eventIndex}].registrations[${regIndex}].church_affiliation`] ? 'border-red-600' : 'border-gray-300'"
+                              >
                               <option value="">Selecione</option>
                               <option value="ASSEMBLEIA">Assembleia de Deus Missões de Campo Grande</option>
                               <option value="OUTRA_IGREJA">De outra igreja</option>
@@ -242,13 +251,14 @@
                         <template v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_affiliation === 'ASSEMBLEIA'">
                           <div>
                             <label class="block text-sm font-medium mb-1">Setor *</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].sector`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].sector`" v-slot="{ field }">
                               <select
                                 v-bind="field"
                                 @change="(e) => { field.onChange(e); setFieldValue(`events[${eventIndex}].registrations[${regIndex}].congregation`, '') }"
                                 @blur="field.onBlur"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].sector`] ? 'border-red-600' : 'border-gray-300'"
+                                >
                                 <option value="">Selecione</option>
                                 <option v-for="sector in eventSectors" :key="sector.value" :value="sector.value">
                                   {{ sector.name }}
@@ -260,13 +270,14 @@
 
                           <div>
                             <label class="block text-sm font-medium mb-1">Congregação *</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].congregation`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].congregation`" v-slot="{ field }">
                               <select
                                 v-bind="field"
                                 @change="field.onChange"
                                 @blur="field.onBlur"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].congregation`] ? 'border-red-600' : 'border-gray-300'"
+                                >
                                 <option value="">Selecione</option>
                                 <option v-for="church in getChurchesBySector(values.events?.[eventIndex]?.registrations?.[regIndex]?.sector)" :key="church.id || church.nome" :value="church.nome">
                                   {{ church.nome }}
@@ -278,7 +289,7 @@
 
                           <div>
                             <label class="block text-sm font-medium mb-1">Tipo *</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" v-slot="{ field }">
                               <select
                                 v-bind="field"
                                 @change="(e) => {
@@ -286,8 +297,9 @@
                                   setFieldValue(`events[${eventIndex}].registrations[${regIndex}].position`, '');
                                 }"
                                 @blur="field.onBlur"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].church_type`] ? 'border-red-600' : 'border-gray-300'"
+                                >
                                 <option value="">Selecione</option>
                                 <option value="Membro">Membro</option>
                                 <option value="Diácono">Diácono</option>
@@ -306,12 +318,13 @@
 
                           <div v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_type === 'OUTRO'" class="col-span-1 sm:col-span-2 lg:col-span-4">
                             <label class="block text-sm font-medium mb-1">Cargo *</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].position`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].position`" v-slot="{ field }">
                               <input
                                 v-bind="field"
                                 placeholder="Digite o cargo"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].position`] ? 'border-red-600' : 'border-gray-300'"
+                                 />
                             </Field>
                             <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].position`" class="text-red-600 text-xs mt-1" />
                           </div>
@@ -321,19 +334,20 @@
                         <template v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_affiliation === 'OUTRA_IGREJA'">
                           <div class="col-span-1 sm:col-span-2 lg:col-span-4">
                             <label class="block text-sm font-medium mb-1">Nome da Igreja *</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].other_church_name`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].other_church_name`" v-slot="{ field }">
                               <input
                                 v-bind="field"
                                 placeholder="Digite o nome da igreja"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].other_church_name`] ? 'border-red-600' : 'border-gray-300'"
+                                 />
                             </Field>
                             <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].other_church_name`" class="text-red-600 text-xs mt-1" />
                           </div>
 
                           <div>
                             <label class="block text-sm font-medium mb-1">Cargo Ministerial</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].church_type`" v-slot="{ field }">
                               <select
                                 v-bind="field"
                                 @change="(e) => {
@@ -341,8 +355,9 @@
                                   setFieldValue(`events[${eventIndex}].registrations[${regIndex}].position`, '');
                                 }"
                                 @blur="field.onBlur"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'">
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].church_type`] ? 'border-red-600' : 'border-gray-300'"
+                                >
                                 <option value="">Selecione (opcional)</option>
                                 <option value="Membro">Membro</option>
                                 <option value="Diácono">Diácono</option>
@@ -361,12 +376,13 @@
 
                           <div v-if="values.events?.[eventIndex]?.registrations?.[regIndex]?.church_type === 'OUTRO'" class="col-span-1 sm:col-span-2 lg:col-span-4">
                             <label class="block text-sm font-medium mb-1">Cargo *</label>
-                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].position`" v-slot="{ field, meta }">
+                            <Field :name="`events[${eventIndex}].registrations[${regIndex}].position`" v-slot="{ field }">
                               <input
                                 v-bind="field"
                                 placeholder="Digite o cargo"
-                                class="w-full border px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                                :class="meta.touched && meta.errors ? 'border-red-600' : 'border-gray-300'" />
+                                class="w-full border px-3 py-2 rounded-lg transition"
+                                :class="errors[`events[${eventIndex}].registrations[${regIndex}].position`] ? 'border-red-600' : 'border-gray-300'"
+                                 />
                             </Field>
                             <ErrorMessage :name="`events[${eventIndex}].registrations[${regIndex}].position`" class="text-red-600 text-xs mt-1" />
                           </div>
@@ -929,7 +945,7 @@ function validateCPF(v) {
   let rev = 11 - (sum % 11)
   rev = rev >= 10 ? 0 : rev
   if (rev !== parseInt(s.charAt(9))) return false
-  
+
   sum = 0
   for (let i = 0; i < 10; i++) {
     sum += parseInt(s.charAt(i)) * (11 - i)
@@ -970,8 +986,8 @@ const schema = computed(() => {
         if (day < 1 || day > 31) return false
         if (year < 1900 || year > new Date().getFullYear()) return false
         const date = new Date(year, month - 1, day)
-        return date.getFullYear() === year && 
-               date.getMonth() === month - 1 && 
+        return date.getFullYear() === year &&
+               date.getMonth() === month - 1 &&
                date.getDate() === day
       }),
     email: yup.string()
@@ -1064,8 +1080,8 @@ const schema = computed(() => {
                 if (day < 1 || day > 31) return false
                 if (year < 1900 || year > new Date().getFullYear()) return false
                 const date = new Date(year, month - 1, day)
-                return date.getFullYear() === year && 
-                       date.getMonth() === month - 1 && 
+                return date.getFullYear() === year &&
+                       date.getMonth() === month - 1 &&
                        date.getDate() === day
               }),
             gender: yup.string().required('Gênero é obrigatório'),
@@ -1445,14 +1461,14 @@ async function handleSubmit(event, { setTouched, errors, values, formHandleSubmi
 
   // Verificar se há erros - confiar principalmente no objeto errors do vee-validate
   const errorKeys = []
-  
+
   // Coletar erros do objeto errors (fonte mais confiável e atualizada)
   Object.keys(errors).forEach(key => {
     if (errors[key]) {
       errorKeys.push(key)
     }
   })
-  
+
   // Se não encontrou erros no objeto errors, verificar no validationResult
   if (errorKeys.length === 0 && validationResult && validationResult.errors) {
     Object.keys(validationResult.errors).forEach(key => {
@@ -1480,16 +1496,16 @@ async function handleSubmit(event, { setTouched, errors, values, formHandleSubmi
       if (errorKeys.length > 0) {
         const firstErrorKey = errorKeys[0]
         console.log('Primeiro erro:', firstErrorKey)
-        
+
         // Tentar encontrar o campo de várias formas
         let firstErrorField = document.querySelector(`[name="${firstErrorKey}"]`)
-        
+
         if (!firstErrorField) {
           // Tentar com notação de array escapada
           const arrayKey = firstErrorKey.replace(/\[/g, '\\[').replace(/\]/g, '\\]')
           firstErrorField = document.querySelector(`[name="${arrayKey}"]`)
         }
-        
+
         if (!firstErrorField) {
           // Tentar com o último segmento do nome
           const lastSegment = firstErrorKey.split('.').pop() || firstErrorKey.split('[').pop()?.split(']')[0]
@@ -1498,12 +1514,12 @@ async function handleSubmit(event, { setTouched, errors, values, formHandleSubmi
                              document.querySelector(`select[name*="${lastSegment}"]`)
           }
         }
-        
+
         if (!firstErrorField) {
           // Fallback: procurar qualquer campo com erro visual
           firstErrorField = document.querySelector('.border-red-600')
         }
-        
+
         if (firstErrorField) {
           firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' })
           setTimeout(() => {
@@ -1525,7 +1541,7 @@ async function handleSubmit(event, { setTouched, errors, values, formHandleSubmi
         }
       }
 
-      const errorMessage = errorKeys.length > 0 
+      const errorMessage = errorKeys.length > 0
         ? `Por favor, corrija os erros nos campos. ${errorKeys.length} campo(s) com erro: ${errorKeys.slice(0, 3).join(', ')}${errorKeys.length > 3 ? '...' : ''}`
         : 'Por favor, preencha todos os campos obrigatórios corretamente.'
       toastRef.value.open(errorMessage, 'error')
@@ -1542,7 +1558,7 @@ async function handleSubmit(event, { setTouched, errors, values, formHandleSubmi
     errorsObjectKeys: Object.keys(errors).filter(k => errors[k]),
     hasErrors: hasErrors
   })
-  
+
   // Se não há erros, chamar onSubmit diretamente
   // O formHandleSubmit pode estar fazendo validação adicional e bloqueando
   if (!hasErrors) {
